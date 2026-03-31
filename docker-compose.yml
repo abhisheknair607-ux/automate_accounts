@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-invoice_recon}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@db:5432/invoice_recon}
+      AUTO_CREATE_SCHEMA: "false"
+      STORAGE_ROOT: /workspace/backend/storage
+      DEFAULT_EXTRACTION_PROVIDER: ${DEFAULT_EXTRACTION_PROVIDER:-mock}
+      CORS_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
+    depends_on:
+      - db
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - backend_storage:/workspace/backend/storage
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000/api}
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+volumes:
+  postgres_data:
+  backend_storage:

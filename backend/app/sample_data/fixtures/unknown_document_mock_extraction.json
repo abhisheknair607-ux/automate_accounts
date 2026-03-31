@@ -1,0 +1,16 @@
+{
+  "document_type": "unknown",
+  "provider_name": "mock",
+  "provider_version": "1.0.0",
+  "classification_confidence": 0.2,
+  "raw_payload": {
+    "notes": [
+      "No specific mock fixture was mapped for this document."
+    ]
+  },
+  "canonical_payload": {
+    "message": "No canonical payload available for this unknown document fixture."
+  },
+  "low_confidence_fields": [],
+  "mock_data": true
+}

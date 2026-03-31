@@ -1,0 +1,177 @@
+{
+  "document_type": "accounting_template",
+  "provider_name": "mock",
+  "provider_version": "1.0.0",
+  "classification_confidence": 0.93,
+  "raw_payload": {
+    "source_filename": "Accounting Template.png",
+    "document_kind": "template_image",
+    "notes": [
+      "The accounting template image is treated as the real sample source.",
+      "Column names and mappings below are realistic mock fixtures derived from a plausible AP import template."
+    ]
+  },
+  "canonical_payload": {
+    "template_name": "Retail AP Import Template",
+    "template_version": "mock-1.0",
+    "columns": [
+      {
+        "column_name": "Document Number",
+        "source_field": "invoice_number",
+        "required": true,
+        "default_value": null
+      },
+      {
+        "column_name": "Document Date",
+        "source_field": "invoice_date",
+        "required": true,
+        "default_value": null
+      },
+      {
+        "column_name": "Supplier",
+        "source_field": "supplier_name",
+        "required": true,
+        "default_value": null
+      },
+      {
+        "column_name": "Supplier Account",
+        "source_field": "account_number",
+        "required": true,
+        "default_value": null
+      },
+      {
+        "column_name": "Store Number",
+        "source_field": "store_number",
+        "required": true,
+        "default_value": null
+      },
+      {
+        "column_name": "Docket Number",
+        "source_field": "docket_number",
+        "required": false,
+        "default_value": ""
+      },
+      {
+        "column_name": "SKU",
+        "source_field": "product_code",
+        "required": false,
+        "default_value": ""
+      },
+      {
+        "column_name": "Description",
+        "source_field": "description",
+        "required": true,
+        "default_value": null
+      },
+      {
+        "column_name": "Department",
+        "source_field": "department_code",
+        "required": false,
+        "default_value": ""
+      },
+      {
+        "column_name": "Invoiced Qty",
+        "source_field": "invoiced_quantity",
+        "required": true,
+        "default_value": "0"
+      },
+      {
+        "column_name": "Delivered Qty",
+        "source_field": "delivered_quantity",
+        "required": false,
+        "default_value": "0"
+      },
+      {
+        "column_name": "Unit Price",
+        "source_field": "unit_price",
+        "required": true,
+        "default_value": "0.00"
+      },
+      {
+        "column_name": "Invoice Net",
+        "source_field": "invoice_net_amount",
+        "required": true,
+        "default_value": "0.00"
+      },
+      {
+        "column_name": "Delivery Net",
+        "source_field": "delivery_net_amount",
+        "required": false,
+        "default_value": "0.00"
+      },
+      {
+        "column_name": "VAT Rate",
+        "source_field": "vat_rate",
+        "required": true,
+        "default_value": "0.00"
+      },
+      {
+        "column_name": "VAT Amount",
+        "source_field": "vat_amount",
+        "required": true,
+        "default_value": "0.00"
+      },
+      {
+        "column_name": "Gross Amount",
+        "source_field": "gross_amount",
+        "required": true,
+        "default_value": "0.00"
+      },
+      {
+        "column_name": "Match Status",
+        "source_field": "match_status",
+        "required": true,
+        "default_value": "review_required"
+      },
+      {
+        "column_name": "Exception Reasons",
+        "source_field": "exception_reasons",
+        "required": false,
+        "default_value": ""
+      },
+      {
+        "column_name": "Approval Status",
+        "source_field": "approval_status",
+        "required": true,
+        "default_value": "review_required"
+      }
+    ],
+    "notes": [
+      "Template column headings are mocked from the uploaded image.",
+      "Use this fixture as the local-development export contract until a real template parser is implemented."
+    ],
+    "low_confidence_fields": [
+      {
+        "field_path": "columns[8].column_name",
+        "score": 0.76,
+        "value": "Department",
+        "requires_review": true,
+        "source_page": 1,
+        "comment": "Department column label is inferred from the sample image."
+      }
+    ],
+    "audit": {
+      "source_filename": "Accounting Template.png",
+      "provider_name": "mock",
+      "provider_version": "1.0.0",
+      "extracted_at": "2026-03-24T20:32:00Z",
+      "page_count": 1,
+      "mock_data": true,
+      "notes": [
+        "Accounting template structure is realistic mock data.",
+        "This fixture exists because local OCR and template parsing were not available for the image."
+      ]
+    }
+  },
+  "low_confidence_fields": [
+    {
+      "field_path": "columns[8].column_name",
+      "score": 0.76,
+      "value": "Department",
+      "requires_review": true,
+      "source_page": 1,
+      "comment": "Template column label mocked."
+    }
+  ],
+  "mock_data": true
+}

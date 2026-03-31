@@ -1,0 +1,215 @@
+{
+  "document_type": "delivery_docket",
+  "provider_name": "mock",
+  "provider_version": "1.0.0",
+  "classification_confidence": 0.98,
+  "raw_payload": {
+    "source_filename": "Delivery Docket.jpeg",
+    "document_kind": "delivery_docket_image",
+    "page_count": 1,
+    "notes": [
+      "Mock OCR fixture based on the supplied delivery docket image.",
+      "The image is treated as the real sample source, but fields below are mocked where OCR certainty was unavailable locally."
+    ]
+  },
+  "canonical_payload": {
+    "docket_number": "DD-240326-2064",
+    "docket_date": "2026-03-24",
+    "account_number": "64876",
+    "store_number": "2064",
+    "supplier_name": "Musgrave Retail Partners Ireland",
+    "invoice_reference": "598527",
+    "subtotal_amount": "700.70",
+    "tax_total": "109.21",
+    "gross_total": "809.91",
+    "vehicle_reference": "07-C-41201",
+    "signed_by": "Store Receiver",
+    "lines": [
+      {
+        "line_number": 1,
+        "page_number": 1,
+        "product_code": "100245",
+        "description": "Fresh Milk 2L",
+        "quantity_delivered": "48",
+        "unit_of_measure": "CASE",
+        "expected_unit_price": "2.10",
+        "extended_amount": "100.80",
+        "source_reference": "IMG-L1",
+        "confidence_scores": {
+          "product_code": 0.94,
+          "quantity_delivered": 0.95
+        }
+      },
+      {
+        "line_number": 2,
+        "page_number": 1,
+        "product_code": "100310",
+        "description": "White Loaf Bread",
+        "quantity_delivered": "60",
+        "unit_of_measure": "CASE",
+        "expected_unit_price": "1.35",
+        "extended_amount": "81.00",
+        "source_reference": "IMG-L2",
+        "confidence_scores": {
+          "product_code": 0.93,
+          "quantity_delivered": 0.96
+        }
+      },
+      {
+        "line_number": 3,
+        "page_number": 1,
+        "product_code": "100411",
+        "description": "Braeburn Apples 1kg",
+        "quantity_delivered": "34",
+        "unit_of_measure": "CASE",
+        "expected_unit_price": "1.90",
+        "extended_amount": "64.60",
+        "source_reference": "IMG-L3",
+        "confidence_scores": {
+          "product_code": 0.86,
+          "quantity_delivered": 0.82
+        }
+      },
+      {
+        "line_number": 4,
+        "page_number": 1,
+        "product_code": "200115",
+        "description": "Ground Coffee 500g",
+        "quantity_delivered": "24",
+        "unit_of_measure": "CASE",
+        "expected_unit_price": "4.6417",
+        "extended_amount": "111.40",
+        "source_reference": "IMG-L4",
+        "confidence_scores": {
+          "product_code": 0.91,
+          "quantity_delivered": 0.92
+        }
+      },
+      {
+        "line_number": 5,
+        "page_number": 1,
+        "product_code": "300870",
+        "description": "Laundry Detergent 2L",
+        "quantity_delivered": "20",
+        "unit_of_measure": "CASE",
+        "expected_unit_price": "7.50",
+        "extended_amount": "150.00",
+        "source_reference": "IMG-L5",
+        "confidence_scores": {
+          "product_code": 0.89,
+          "quantity_delivered": 0.90
+        }
+      },
+      {
+        "line_number": 6,
+        "page_number": 1,
+        "product_code": "401225",
+        "description": "Frozen Pizza Margherita",
+        "quantity_delivered": "30",
+        "unit_of_measure": "CASE",
+        "expected_unit_price": "3.1167",
+        "extended_amount": "93.50",
+        "source_reference": "IMG-L6",
+        "confidence_scores": {
+          "product_code": 0.87,
+          "quantity_delivered": 0.88
+        }
+      },
+      {
+        "line_number": 7,
+        "page_number": 1,
+        "product_code": "500600",
+        "description": "Still Water 500ml 24pk",
+        "quantity_delivered": "72",
+        "unit_of_measure": "CASE",
+        "expected_unit_price": "0.80",
+        "extended_amount": "57.60",
+        "source_reference": "IMG-L7",
+        "confidence_scores": {
+          "product_code": 0.74,
+          "quantity_delivered": 0.78
+        }
+      },
+      {
+        "line_number": 8,
+        "page_number": 1,
+        "product_code": "600420",
+        "description": "Salted Crisps Multipack",
+        "quantity_delivered": "38",
+        "unit_of_measure": "CASE",
+        "expected_unit_price": "1.10",
+        "extended_amount": "41.80",
+        "source_reference": "IMG-L8",
+        "confidence_scores": {
+          "product_code": 0.84,
+          "quantity_delivered": 0.80
+        }
+      }
+    ],
+    "low_confidence_fields": [
+      {
+        "field_path": "docket_number",
+        "score": 0.74,
+        "value": "DD-240326-2064",
+        "requires_review": true,
+        "source_page": 1,
+        "comment": "Docket number reconstructed as realistic mock."
+      },
+      {
+        "field_path": "lines[6].quantity_delivered",
+        "score": 0.78,
+        "value": "72",
+        "requires_review": true,
+        "source_page": 1,
+        "comment": "The image is assumed slightly blurred in the quantity column."
+      },
+      {
+        "field_path": "signed_by",
+        "score": 0.69,
+        "value": "Store Receiver",
+        "requires_review": true,
+        "source_page": 1,
+        "comment": "Signature block is mocked."
+      }
+    ],
+    "audit": {
+      "source_filename": "Delivery Docket.jpeg",
+      "provider_name": "mock",
+      "provider_version": "1.0.0",
+      "extracted_at": "2026-03-24T20:31:00Z",
+      "page_count": 1,
+      "mock_data": true,
+      "notes": [
+        "Field layout follows a plausible large-retailer delivery docket.",
+        "Docket details are realistic mock fixtures because OCR could not be executed locally."
+      ]
+    }
+  },
+  "low_confidence_fields": [
+    {
+      "field_path": "docket_number",
+      "score": 0.74,
+      "value": "DD-240326-2064",
+      "requires_review": true,
+      "source_page": 1,
+      "comment": "Mocked from sample context."
+    },
+    {
+      "field_path": "lines[6].quantity_delivered",
+      "score": 0.78,
+      "value": "72",
+      "requires_review": true,
+      "source_page": 1,
+      "comment": "Mocked due uncertain OCR."
+    },
+    {
+      "field_path": "signed_by",
+      "score": 0.69,
+      "value": "Store Receiver",
+      "requires_review": true,
+      "source_page": 1,
+      "comment": "Signature field mocked."
+    }
+  ],
+  "mock_data": true
+}

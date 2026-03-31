@@ -1,0 +1,416 @@
+{
+  "document_type": "invoice",
+  "provider_name": "mock",
+  "provider_version": "1.0.0",
+  "classification_confidence": 0.99,
+  "raw_payload": {
+    "source_filename": "Invoice_598527_Account_64876_Division_MRPI_Full_unlocked.pdf",
+    "document_kind": "scanned_invoice",
+    "page_count": 13,
+    "notes": [
+      "Mock OCR fixture anchored to the supplied Musgrave invoice sample.",
+      "Header values called out by the user are treated as real anchors.",
+      "Line-level and summary detail is realistic mock data because local OCR on the scanned PDF was not available."
+    ]
+  },
+  "canonical_payload": {
+    "supplier": {
+      "supplier_code": "MRPI",
+      "name": "Musgrave Retail",
+      "legal_name": "Musgrave Retail Partners Ireland",
+      "account_number": "64876",
+      "vat_number": "IE6388047V",
+      "address": [
+        "Musgrave House",
+        "Ballycurreen",
+        "Cork"
+      ],
+      "confidence_scores": {
+        "name": 0.97,
+        "legal_name": 0.84,
+        "account_number": 0.99
+      }
+    },
+    "store": {
+      "store_number": "2064",
+      "name": "Store 2064",
+      "division": "MRPI",
+      "address": [
+        "Retail Park",
+        "Ireland"
+      ],
+      "confidence_scores": {
+        "store_number": 0.99,
+        "division": 0.91
+      }
+    },
+    "header": {
+      "invoice_number": "598527",
+      "invoice_date": "2026-03-24",
+      "account_number": "64876",
+      "store_number": "2064",
+      "supplier_name": "Musgrave Retail",
+      "supplier_account_reference": "64876",
+      "currency": "EUR",
+      "division_code": "MRPI",
+      "payment_terms": "30 days EOM",
+      "delivery_reference": "DD-240326-2064",
+      "subtotal_amount": "706.70",
+      "discount_total": "7.50",
+      "tax_total": "109.72",
+      "gross_total": "816.42",
+      "confidence_scores": {
+        "invoice_number": 0.99,
+        "invoice_date": 0.99,
+        "account_number": 0.99,
+        "store_number": 0.99,
+        "supplier_name": 0.95,
+        "subtotal_amount": 0.93,
+        "tax_total": 0.92,
+        "gross_total": 0.92
+      }
+    },
+    "lines": [
+      {
+        "line_number": 1,
+        "page_number": 1,
+        "product_code": "100245",
+        "description": "Fresh Milk 2L",
+        "department_code": "CHILL",
+        "department_name": "Chilled",
+        "quantity": "48",
+        "unit_of_measure": "CASE",
+        "unit_price": "2.10",
+        "extended_amount": "100.80",
+        "discount_amount": "0.00",
+        "net_amount": "100.80",
+        "vat_rate": "0.135",
+        "vat_amount": "13.61",
+        "gross_amount": "114.41",
+        "delivery_reference": "DD-240326-2064",
+        "source_reference": "P1-L1",
+        "confidence_scores": {
+          "product_code": 0.96,
+          "description": 0.95,
+          "quantity": 0.97,
+          "unit_price": 0.98
+        }
+      },
+      {
+        "line_number": 2,
+        "page_number": 1,
+        "product_code": "100310",
+        "description": "White Loaf Bread",
+        "department_code": "BAKERY",
+        "department_name": "Bakery",
+        "quantity": "60",
+        "unit_of_measure": "CASE",
+        "unit_price": "1.35",
+        "extended_amount": "81.00",
+        "discount_amount": "0.00",
+        "net_amount": "81.00",
+        "vat_rate": "0.00",
+        "vat_amount": "0.00",
+        "gross_amount": "81.00",
+        "delivery_reference": "DD-240326-2064",
+        "source_reference": "P1-L2",
+        "confidence_scores": {
+          "product_code": 0.95,
+          "description": 0.94,
+          "quantity": 0.98,
+          "unit_price": 0.97
+        }
+      },
+      {
+        "line_number": 3,
+        "page_number": 2,
+        "product_code": "100411",
+        "description": "Braeburn Apples 1kg",
+        "department_code": "PRODUCE",
+        "department_name": "Produce",
+        "quantity": "36",
+        "unit_of_measure": "CASE",
+        "unit_price": "1.90",
+        "extended_amount": "68.40",
+        "discount_amount": "0.00",
+        "net_amount": "68.40",
+        "vat_rate": "0.00",
+        "vat_amount": "0.00",
+        "gross_amount": "68.40",
+        "delivery_reference": "DD-240326-2064",
+        "source_reference": "P2-L8",
+        "confidence_scores": {
+          "product_code": 0.90,
+          "description": 0.91,
+          "quantity": 0.88,
+          "unit_price": 0.95
+        }
+      },
+      {
+        "line_number": 4,
+        "page_number": 2,
+        "product_code": "200115",
+        "description": "Ground Coffee 500g",
+        "department_code": "GROCERY",
+        "department_name": "Grocery",
+        "quantity": "24",
+        "unit_of_measure": "CASE",
+        "unit_price": "4.85",
+        "extended_amount": "116.40",
+        "discount_amount": "5.00",
+        "net_amount": "111.40",
+        "vat_rate": "0.23",
+        "vat_amount": "25.62",
+        "gross_amount": "137.02",
+        "delivery_reference": "DD-240326-2064",
+        "source_reference": "P2-L14",
+        "confidence_scores": {
+          "product_code": 0.94,
+          "description": 0.93,
+          "quantity": 0.97,
+          "unit_price": 0.96
+        }
+      },
+      {
+        "line_number": 5,
+        "page_number": 3,
+        "product_code": "300870",
+        "description": "Laundry Detergent 2L",
+        "department_code": "HOUSE",
+        "department_name": "Household",
+        "quantity": "20",
+        "unit_of_measure": "CASE",
+        "unit_price": "7.50",
+        "extended_amount": "150.00",
+        "discount_amount": "0.00",
+        "net_amount": "150.00",
+        "vat_rate": "0.23",
+        "vat_amount": "34.50",
+        "gross_amount": "184.50",
+        "delivery_reference": "DD-240326-2064",
+        "source_reference": "P3-L3",
+        "confidence_scores": {
+          "product_code": 0.92,
+          "description": 0.90,
+          "quantity": 0.96,
+          "unit_price": 0.95
+        }
+      },
+      {
+        "line_number": 6,
+        "page_number": 3,
+        "product_code": "401225",
+        "description": "Frozen Pizza Margherita",
+        "department_code": "FROZEN",
+        "department_name": "Frozen",
+        "quantity": "30",
+        "unit_of_measure": "CASE",
+        "unit_price": "3.20",
+        "extended_amount": "96.00",
+        "discount_amount": "2.50",
+        "net_amount": "93.50",
+        "vat_rate": "0.135",
+        "vat_amount": "12.62",
+        "gross_amount": "106.12",
+        "delivery_reference": "DD-240326-2064",
+        "source_reference": "P3-L12",
+        "confidence_scores": {
+          "product_code": 0.91,
+          "description": 0.89,
+          "quantity": 0.95,
+          "unit_price": 0.94
+        }
+      },
+      {
+        "line_number": 7,
+        "page_number": 4,
+        "product_code": "500600",
+        "description": "Still Water 500ml 24pk",
+        "department_code": "BEV",
+        "department_name": "Beverage",
+        "quantity": "72",
+        "unit_of_measure": "CASE",
+        "unit_price": "0.80",
+        "extended_amount": "57.60",
+        "discount_amount": "0.00",
+        "net_amount": "57.60",
+        "vat_rate": "0.23",
+        "vat_amount": "13.25",
+        "gross_amount": "70.85",
+        "delivery_reference": "DD-240326-2064",
+        "source_reference": "P4-L5",
+        "confidence_scores": {
+          "product_code": 0.72,
+          "description": 0.83,
+          "quantity": 0.93,
+          "unit_price": 0.95
+        }
+      },
+      {
+        "line_number": 8,
+        "page_number": 4,
+        "product_code": "600420",
+        "description": "Salted Crisps Multipack",
+        "department_code": "GROCERY",
+        "department_name": "Grocery",
+        "quantity": "40",
+        "unit_of_measure": "CASE",
+        "unit_price": "1.10",
+        "extended_amount": "44.00",
+        "discount_amount": "0.00",
+        "net_amount": "44.00",
+        "vat_rate": "0.23",
+        "vat_amount": "10.12",
+        "gross_amount": "54.12",
+        "delivery_reference": "DD-240326-2064",
+        "source_reference": "P4-L11",
+        "confidence_scores": {
+          "product_code": 0.90,
+          "description": 0.88,
+          "quantity": 0.94,
+          "unit_price": 0.95
+        }
+      }
+    ],
+    "tax_summaries": [
+      {
+        "tax_code": "ZERO",
+        "vat_rate": "0.00",
+        "net_amount": "149.40",
+        "tax_amount": "0.00",
+        "gross_amount": "149.40",
+        "source_page": 11
+      },
+      {
+        "tax_code": "REDUCED",
+        "vat_rate": "0.135",
+        "net_amount": "194.30",
+        "tax_amount": "26.23",
+        "gross_amount": "220.53",
+        "source_page": 11
+      },
+      {
+        "tax_code": "STANDARD",
+        "vat_rate": "0.23",
+        "net_amount": "363.00",
+        "tax_amount": "83.49",
+        "gross_amount": "446.49",
+        "source_page": 11
+      }
+    ],
+    "discount_summaries": [
+      {
+        "discount_type": "trade_discount",
+        "description": "Promotional and line discount total",
+        "amount": "7.50",
+        "tax_treatment": "included in line net amounts",
+        "source_page": 12
+      }
+    ],
+    "department_summaries": [
+      {
+        "department_code": "CHILL",
+        "department_name": "Chilled",
+        "net_amount": "100.80",
+        "gross_amount": "114.41",
+        "source_page": 12
+      },
+      {
+        "department_code": "BAKERY",
+        "department_name": "Bakery",
+        "net_amount": "81.00",
+        "gross_amount": "81.00",
+        "source_page": 12
+      },
+      {
+        "department_code": "PRODUCE",
+        "department_name": "Produce",
+        "net_amount": "68.40",
+        "gross_amount": "68.40",
+        "source_page": 12
+      },
+      {
+        "department_code": "GROCERY",
+        "department_name": "Grocery",
+        "net_amount": "155.40",
+        "gross_amount": "191.14",
+        "source_page": 12
+      },
+      {
+        "department_code": "HOUSE",
+        "department_name": "Household",
+        "net_amount": "150.00",
+        "gross_amount": "184.50",
+        "source_page": 12
+      },
+      {
+        "department_code": "FROZEN",
+        "department_name": "Frozen",
+        "net_amount": "93.50",
+        "gross_amount": "106.12",
+        "source_page": 12
+      },
+      {
+        "department_code": "BEV",
+        "department_name": "Beverage",
+        "net_amount": "57.60",
+        "gross_amount": "70.85",
+        "source_page": 12
+      }
+    ],
+    "delivery_summary": {
+      "delivered_case_count": 330,
+      "delivered_line_count": 8,
+      "source_page": 13
+    },
+    "low_confidence_fields": [
+      {
+        "field_path": "supplier.legal_name",
+        "score": 0.84,
+        "value": "Musgrave Retail Partners Ireland",
+        "requires_review": true,
+        "source_page": 1,
+        "comment": "Supplier legal name is anchored to the user-provided sample note and treated as a realistic mock."
+      },
+      {
+        "field_path": "lines[6].product_code",
+        "score": 0.72,
+        "value": "500600",
+        "requires_review": true,
+        "source_page": 4,
+        "comment": "Barcode/SKU on the scanned page is mocked."
+      }
+    ],
+    "audit": {
+      "source_filename": "Invoice_598527_Account_64876_Division_MRPI_Full_unlocked.pdf",
+      "provider_name": "mock",
+      "provider_version": "1.0.0",
+      "extracted_at": "2026-03-24T20:30:00Z",
+      "page_count": 13,
+      "mock_data": true,
+      "notes": [
+        "Invoice anchors come from the supplied document name and user-provided sample details.",
+        "Line items, tax analysis, discount analysis, and department analysis are realistic mock fixtures for local development."
+      ]
+    }
+  },
+  "low_confidence_fields": [
+    {
+      "field_path": "supplier.legal_name",
+      "score": 0.84,
+      "value": "Musgrave Retail Partners Ireland",
+      "requires_review": true,
+      "source_page": 1,
+      "comment": "Mocked from sample context."
+    },
+    {
+      "field_path": "lines[6].product_code",
+      "score": 0.72,
+      "value": "500600",
+      "requires_review": true,
+      "source_page": 4,
+      "comment": "Mocked due uncertain OCR."
+    }
+  ],
+  "mock_data": true
+}

@@ -1,0 +1,14 @@
+.env
+backend/storage/
+backend/.test_runtime/
+backend/.paddlex/
+backend/.debug_runtime/
+frontend/.next/
+frontend/node_modules/
+.netlify/
+run-logs/
+__pycache__/
+.pytest_cache/
+.pytest_tmp/
+pytest-cache-files-*/
+*.pyc

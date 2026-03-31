@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
+const isNetlify = process.env.NETLIFY === "true" || process.env.NETLIFY_LOCAL === "true";
+
 const nextConfig = {
-  output: "standalone"
+  ...(isNetlify ? {} : { output: "standalone" })
 };
 
 module.exports = nextConfig;

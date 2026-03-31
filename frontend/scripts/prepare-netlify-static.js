@@ -34,5 +34,19 @@ copyFile(path.join(serverAppDir, "index.html"), path.join(nextDir, "index.html")
 copyFile(path.join(serverAppDir, "_not-found.html"), path.join(nextDir, "404.html"));
 copyDir(staticDir, publicStaticDir);
 
-const redirects = "/* /index.html 200\n";
+const backendUrl = (process.env.BACKEND_URL || "").replace(/\/$/, "");
+if (!backendUrl) {
+  console.warn(
+    "\x1b[33m[prepare-netlify-static] WARNING: BACKEND_URL is not set.\n" +
+    "  API calls will fail in production. Set BACKEND_URL in the Netlify\n" +
+    "  dashboard (Site settings → Environment variables) and redeploy.\x1b[0m"
+  );
+}
+
+// API proxy rule must come BEFORE the SPA catch-all so Netlify proxies
+// /api/* to the real backend instead of serving index.html for it.
+const apiRule = backendUrl
+  ? `/api/* ${backendUrl}/api/:splat 200\n`
+  : "";
+const redirects = `${apiRule}/* /index.html 200\n`;
 fs.writeFileSync(path.join(nextDir, "_redirects"), redirects, "utf8");

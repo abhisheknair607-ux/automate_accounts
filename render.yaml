@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: automate-backend
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: CORS_ORIGINS
+        value: '["https://automate-account.netlify.app"]'
+      - key: DEFAULT_EXTRACTION_PROVIDER
+        value: mock
+      - key: OCR_SPACE_API_KEY
+        sync: false          # fill in via Render dashboard
+      - key: AUTO_CREATE_SCHEMA
+        value: "true"

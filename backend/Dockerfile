@@ -13,6 +13,9 @@ COPY ["Invoice_598527_Account_64876_Division_MRPI_Full_unlocked.pdf", "/workspac
 COPY ["Delivery Docket.jpeg", "/workspace/"]
 COPY ["Accounting Template.png", "/workspace/"]
 
+RUN mkdir -p /workspace/backend/storage
+
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Render (and most PaaS) inject $PORT at runtime; fall back to 8000 for local use.
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}

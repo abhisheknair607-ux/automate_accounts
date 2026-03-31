@@ -89,9 +89,16 @@ export function CaseSectionView({ caseId, section }: { caseId: string; section: 
                     {exportId ? <StatusPill value={(item as Record<string, unknown>).status as string} /> : null}
                   </div>
                   {exportId ? (
-                    <Link className="ghost-link" href={api.exportDownloadUrl(exportId)} target="_blank">
+                    <button
+                      className="ghost-link"
+                      onClick={() =>
+                        api.downloadExport(exportId).catch((err) =>
+                          setError(err instanceof Error ? err.message : "Failed to download export")
+                        )
+                      }
+                    >
                       Download export
-                    </Link>
+                    </button>
                   ) : null}
                   <pre>{JSON.stringify(item, null, 2)}</pre>
                 </div>

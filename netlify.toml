@@ -6,3 +6,4 @@
 [build.environment]
   NODE_VERSION = "20"
   NEXT_PUBLIC_API_BASE_URL = "/api"
+  BACKEND_URL = "https://automate-backend-qfj5.onrender.com"

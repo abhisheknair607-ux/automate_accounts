@@ -1,6 +1,11 @@
+"use client";
+
+import { useParams } from "next/navigation";
+
 import { CaseSectionView } from "@/components/case-section-view";
 
 
-export default function ReconciliationPage({ params }: { params: { caseId: string } }) {
-  return <CaseSectionView caseId={params.caseId} section="reconciliation" />;
+export default function ReconciliationPage() {
+  const { caseId } = useParams<{ caseId: string }>();
+  return <CaseSectionView caseId={caseId} section="reconciliation" />;
 }

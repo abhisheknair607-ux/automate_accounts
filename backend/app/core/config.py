@@ -42,6 +42,22 @@ class Settings(BaseSettings):
     ocr_space_max_image_side: int = 1600
     ocr_space_max_image_bytes: int = 950_000
     ocr_space_pdf_render_dpi: int = 144
+    tesseract_command: str = "tesseract"
+    tesseract_data_dir: Path | None = None
+    tesseract_language: str = "eng"
+    tesseract_page_seg_mode: int = 6
+    tesseract_oem: int | None = 3
+    tesseract_timeout_seconds: float = 60.0
+    tesseract_max_image_side: int = 2200
+    tesseract_max_image_bytes: int = 5_000_000
+    tesseract_pdf_render_dpi: int = 200
+    google_document_ai_project_id: str | None = None
+    google_document_ai_location: str = "us"
+    google_document_ai_invoice_processor_id: str | None = None
+    google_document_ai_invoice_processor_version: str | None = None
+    google_document_ai_layout_processor_id: str | None = None
+    google_document_ai_layout_processor_version: str | None = None
+    google_document_ai_timeout_seconds: float = 60.0
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
     )

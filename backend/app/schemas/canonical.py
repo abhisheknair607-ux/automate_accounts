@@ -5,7 +5,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class CanonicalBaseModel(BaseModel):
@@ -24,6 +24,17 @@ class MatchStatus(str, Enum):
     WITHIN_TOLERANCE = "within_tolerance"
     MISMATCH = "mismatch"
     REVIEW_REQUIRED = "review_required"
+
+
+class MatchOrigin(str, Enum):
+    AUTO = "auto"
+    MANUAL = "manual"
+
+
+class TextMatchRule(str, Enum):
+    EXACT = "exact"
+    NORMALIZED = "normalized"
+    CONTAINS = "contains"
 
 
 class IssueSeverity(str, Enum):
@@ -216,6 +227,8 @@ class ReconciledLine(CanonicalBaseModel):
     status: MatchStatus
     reason_codes: list[ReasonCode] = Field(default_factory=list)
     confidence_score: float | None = None
+    match_origin: MatchOrigin = MatchOrigin.AUTO
+    manual_pair_position: int | None = None
 
 
 class ReconciliationIssue(CanonicalBaseModel):
@@ -246,10 +259,19 @@ class ReconciliationTotals(CanonicalBaseModel):
 
 
 class ReconciliationConfig(CanonicalBaseModel):
+    supplier_match_rule: TextMatchRule = TextMatchRule.CONTAINS
+    product_code_match_rule: TextMatchRule = TextMatchRule.NORMALIZED
+    product_name_match_rule: TextMatchRule = TextMatchRule.CONTAINS
     quantity_tolerance: Decimal = Decimal("0.00")
     unit_price_tolerance: Decimal = Decimal("0.02")
-    line_amount_tolerance: Decimal = Decimal("0.50")
-    tax_tolerance: Decimal = Decimal("0.50")
+    line_amount_tolerance: Decimal = Field(
+        default=Decimal("0.50"),
+        validation_alias=AliasChoices("line_amount_tolerance", "pre_amount_tolerance"),
+    )
+    tax_tolerance: Decimal = Field(
+        default=Decimal("0.50"),
+        validation_alias=AliasChoices("tax_tolerance", "vat_tolerance"),
+    )
     total_tolerance: Decimal = Decimal("0.50")
     low_confidence_threshold: float = 0.85
 

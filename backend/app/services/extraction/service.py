@@ -52,17 +52,20 @@ class ExtractionService:
             db.flush()
 
             try:
+                original_doc_type = DocumentType(document.doc_type)
+                original_classification_confidence = document.classification_confidence
                 context = DocumentExtractionContext(
                     document_id=document.id,
                     case_id=case_id,
                     source_filename=document.source_filename,
-                    doc_type=DocumentType(document.doc_type),
+                    doc_type=original_doc_type,
                     absolute_path=local_storage_service.resolve(document.original_path),
                 )
                 result = provider.extract(context)
                 normalized = extraction_normalizer.normalize(result)
 
                 extraction_run.status = "completed"
+                extraction_run.provider_name = result.provider_name
                 extraction_run.provider_payload = jsonable_encoder(result.raw_payload)
                 extraction_run.normalized_payload = jsonable_encoder(
                     normalized.model_dump(mode="json")
@@ -74,8 +77,12 @@ class ExtractionService:
                 )
                 extraction_run.completed_at = datetime.now(UTC).replace(tzinfo=None)
 
-                document.doc_type = result.document_type.value
-                document.classification_confidence = result.classification_confidence
+                if result.document_type == DocumentType.UNKNOWN and original_doc_type != DocumentType.UNKNOWN:
+                    document.doc_type = original_doc_type.value
+                    document.classification_confidence = original_classification_confidence
+                else:
+                    document.doc_type = result.document_type.value
+                    document.classification_confidence = result.classification_confidence
                 document.extraction_status = "completed"
                 document.latest_provider = result.provider_name
                 document.low_confidence_fields = extraction_run.low_confidence_fields

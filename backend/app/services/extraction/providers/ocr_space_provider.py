@@ -55,6 +55,27 @@ class OCRSpaceExtractionProvider(AzureDocumentIntelligenceProvider):
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
 
+    def _provider_display_name(self) -> str:
+        return "OCR.space"
+
+    def _analysis_api_version(self) -> str:
+        return f"ocr.space-{self._settings.ocr_space_engine}"
+
+    def _model_id(self) -> str:
+        return f"ocr.space-engine-{self._settings.ocr_space_engine}"
+
+    def _pdf_render_dpi(self) -> int:
+        return self._settings.ocr_space_pdf_render_dpi
+
+    def _max_image_side(self) -> int:
+        return self._settings.ocr_space_max_image_side
+
+    def _max_image_bytes(self) -> int:
+        return self._settings.ocr_space_max_image_bytes
+
+    def _processed_with_note(self, model_id: str) -> str:
+        return f"Processed with {self._provider_display_name()} engine '{model_id}'."
+
     def _parse_date(self, value: Any):
         parsed = super()._parse_date(value)
         if parsed is not None or not isinstance(value, str):
@@ -71,7 +92,7 @@ class OCRSpaceExtractionProvider(AzureDocumentIntelligenceProvider):
     def extract(self, context: DocumentExtractionContext) -> ProviderExtractionResult:
         self._ensure_configuration()
         analysis = self._analyze_with_ocr_space(context)
-        model_id = f"ocr.space-engine-{self._settings.ocr_space_engine}"
+        model_id = self._model_id()
 
         if context.doc_type == DocumentType.INVOICE:
             return self._build_invoice_result(context, analysis, model_id)
@@ -114,7 +135,7 @@ class OCRSpaceExtractionProvider(AzureDocumentIntelligenceProvider):
         ).strip()
 
         return {
-            "api_version": f"ocr.space-{self._settings.ocr_space_engine}",
+            "api_version": self._analysis_api_version(),
             "content": content,
             "pages": [self._analysis_page(page) for page in page_results],
             "tables": self._analysis_tables(context.doc_type, page_results),
@@ -150,7 +171,7 @@ class OCRSpaceExtractionProvider(AzureDocumentIntelligenceProvider):
     ) -> list[tuple[int, Image.Image]]:
         pdf = pdfium.PdfDocument(str(path))
         page_images: list[tuple[int, Image.Image]] = []
-        scale = self._settings.ocr_space_pdf_render_dpi / 72
+        scale = self._pdf_render_dpi() / 72
         try:
             page_indexes = self._pdf_page_indexes(len(pdf), doc_type)
             for page_number in page_indexes:
@@ -197,17 +218,17 @@ class OCRSpaceExtractionProvider(AzureDocumentIntelligenceProvider):
 
         if best_result is None or not best_result.parsed_text:
             raise RuntimeError(
-                f"OCR.space did not return usable text for page {page_number}."
+                f"{self._provider_display_name()} did not return usable text for page {page_number}."
             )
         return best_result
 
     def _encode_image(self, image: Image.Image) -> bytes:
         working = ImageOps.exif_transpose(image).convert("RGB")
-        max_side = self._settings.ocr_space_max_image_side
+        max_side = self._max_image_side()
         if max(working.size) > max_side:
             working.thumbnail((max_side, max_side))
 
-        max_bytes = self._settings.ocr_space_max_image_bytes
+        max_bytes = self._max_image_bytes()
         quality = 88
         while True:
             buffer = io.BytesIO()
@@ -641,7 +662,10 @@ class OCRSpaceExtractionProvider(AzureDocumentIntelligenceProvider):
                 invoice_number_confidence,
                 invoice_number,
                 invoice_number_page,
-                comment="OCR.space could not confidently read the invoice number, so a fallback identifier was used.",
+                comment=(
+                    f"{self._provider_display_name()} could not confidently read the invoice number, "
+                    "so a fallback identifier was used."
+                ),
             )
 
         if invoice_date is None:
@@ -660,7 +684,10 @@ class OCRSpaceExtractionProvider(AzureDocumentIntelligenceProvider):
                 invoice_date_confidence,
                 invoice_date.isoformat(),
                 invoice_date_page,
-                comment="OCR.space could not confidently read the invoice date, so a fallback date was used.",
+                comment=(
+                    f"{self._provider_display_name()} could not confidently read the invoice date, "
+                    "so a fallback date was used."
+                ),
             )
 
         if supplier_name is None:
@@ -688,7 +715,11 @@ class OCRSpaceExtractionProvider(AzureDocumentIntelligenceProvider):
             store_number_confidence,
             store_number,
             store_number_page,
-            comment="OCR.space needed a fallback for the store number." if store_number == "UNKNOWN" else None,
+            comment=(
+                f"{self._provider_display_name()} needed a fallback for the store number."
+                if store_number == "UNKNOWN"
+                else None
+            ),
         )
         self._flag_if_low(
             low_confidence_fields,
@@ -703,7 +734,7 @@ class OCRSpaceExtractionProvider(AzureDocumentIntelligenceProvider):
             subtotal_confidence,
             str(subtotal_amount),
             subtotal_page,
-            comment="Invoice subtotal was backfilled from OCR.space text heuristics."
+            comment=f"Invoice subtotal was backfilled from {self._provider_display_name()} text heuristics."
             if subtotal_confidence is not None and subtotal_confidence < 0.5
             else None,
         )
@@ -713,7 +744,7 @@ class OCRSpaceExtractionProvider(AzureDocumentIntelligenceProvider):
             tax_total_confidence,
             str(tax_total),
             tax_total_page,
-            comment="Invoice tax total was backfilled from OCR.space text heuristics."
+            comment=f"Invoice tax total was backfilled from {self._provider_display_name()} text heuristics."
             if tax_total_confidence is not None and tax_total_confidence < 0.5
             else None,
         )
@@ -723,17 +754,20 @@ class OCRSpaceExtractionProvider(AzureDocumentIntelligenceProvider):
             gross_total_confidence,
             str(gross_total),
             gross_total_page,
-            comment="Invoice gross total was backfilled from OCR.space text heuristics."
+            comment=f"Invoice gross total was backfilled from {self._provider_display_name()} text heuristics."
             if gross_total_confidence is not None and gross_total_confidence < 0.5
             else None,
         )
 
-        notes = [f"Processed with OCR.space engine '{model_id}'."]
+        notes = [self._processed_with_note(model_id)]
         if any(
             field.field_path in {"header.subtotal_amount", "header.tax_total", "header.gross_total"}
             for field in low_confidence_fields
         ):
-            notes.append("Invoice totals were partially backfilled because OCR.space could not read them cleanly.")
+            notes.append(
+                f"Invoice totals were partially backfilled because {self._provider_display_name()} "
+                "could not read them cleanly."
+            )
 
         invoice = CanonicalInvoice(
             supplier=Supplier(
@@ -1184,7 +1218,10 @@ class OCRSpaceExtractionProvider(AzureDocumentIntelligenceProvider):
                 docket_confidence,
                 docket_number,
                 1 if page_count else None,
-                comment="OCR.space could not read a docket number, so a synthetic identifier was created.",
+                comment=(
+                    f"{self._provider_display_name()} could not read a docket number, "
+                    "so a synthetic identifier was created."
+                ),
             )
 
         if docket_date is None:
@@ -1197,7 +1234,10 @@ class OCRSpaceExtractionProvider(AzureDocumentIntelligenceProvider):
                 date_confidence,
                 docket_date.isoformat(),
                 1 if page_count else None,
-                comment="OCR.space could not read a docket date confidently, so a fallback date was used.",
+                comment=(
+                    f"{self._provider_display_name()} could not read a docket date confidently, "
+                    "so a fallback date was used."
+                ),
             )
 
         if subtotal_amount == Decimal("0.00") and not lines:
@@ -1239,7 +1279,7 @@ class OCRSpaceExtractionProvider(AzureDocumentIntelligenceProvider):
             1 if page_count else None,
         )
 
-        notes = [f"Processed with OCR.space engine '{model_id}'."]
+        notes = [self._processed_with_note(model_id)]
         if any(field.field_path == "subtotal_amount" for field in low_confidence_fields):
             notes.append("Delivery totals were not clearly visible on the uploaded docket and were backfilled.")
 

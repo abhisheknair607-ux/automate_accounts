@@ -13,21 +13,14 @@ from app.schemas.canonical import (
 
 class ReconciliationExportMapper:
     columns = [
-        "Invoice Number",
-        "Invoice Date",
-        "Docket Number",
-        "Invoice Line",
-        "Docket Line",
-        "SKU",
-        "Description",
-        "Invoice Quantity",
-        "Invoice Amount",
-        "Docket Quantity",
-        "Docket Amount",
-        "Quantity Variance",
-        "Amount Variance",
-        "Match Status",
-        "Final Comment",
+        "Product Code",
+        "Product name",
+        "Quantity - Invoice",
+        "Quantity - Docket",
+        "Amount - Invoice",
+        "Amount - Docket",
+        "Mismatch (Yes/No)",
+        "Comment on the Mismatch",
     ]
 
     def map_rows(
@@ -36,99 +29,74 @@ class ReconciliationExportMapper:
         docket: DeliveryDocket,
         reconciliation: ReconciliationResult,
     ) -> list[ReconciliationExportRow]:
-        line_lookup = {
-            line.invoice_line_number: line
-            for line in reconciliation.reconciled_lines
-            if line.invoice_line_number is not None
-        }
+        invoice_line_lookup = {line.line_number: line for line in invoice.lines}
+        docket_line_lookup = {line.line_number: line for line in docket.lines}
         rows: list[ReconciliationExportRow] = []
-        row_number = 1
-
-        for invoice_line in invoice.lines:
-            reconciled_line = line_lookup.get(invoice_line.line_number)
-            if reconciled_line is None:
-                rows.append(
-                    ReconciliationExportRow(
-                        row_number=row_number,
-                        invoice_number=invoice.header.invoice_number,
-                        invoice_date=invoice.header.invoice_date,
-                        docket_number=docket.docket_number,
-                        invoice_line_number=invoice_line.line_number,
-                        product_code=invoice_line.product_code,
-                        description=invoice_line.description,
-                        invoice_quantity=invoice_line.quantity,
-                        invoice_amount=invoice_line.net_amount,
-                        match_status=MatchStatus.REVIEW_REQUIRED,
-                        final_comment="Invoice line was not reconciled.",
-                    )
-                )
-                row_number += 1
-                continue
-
+        for row_number, reconciled_line in enumerate(reconciliation.reconciled_lines, start=1):
+            invoice_line = (
+                invoice_line_lookup.get(reconciled_line.invoice_line_number)
+                if reconciled_line.invoice_line_number is not None
+                else None
+            )
+            docket_line = (
+                docket_line_lookup.get(reconciled_line.docket_line_number)
+                if reconciled_line.docket_line_number is not None
+                else None
+            )
             rows.append(
                 ReconciliationExportRow(
                     row_number=row_number,
                     invoice_number=invoice.header.invoice_number,
                     invoice_date=invoice.header.invoice_date,
                     docket_number=docket.docket_number,
-                    invoice_line_number=invoice_line.line_number,
+                    invoice_line_number=reconciled_line.invoice_line_number,
                     docket_line_number=reconciled_line.docket_line_number,
-                    product_code=invoice_line.product_code or reconciled_line.product_code,
-                    description=invoice_line.description,
-                    invoice_quantity=invoice_line.quantity,
-                    invoice_amount=invoice_line.net_amount,
-                    docket_quantity=reconciled_line.delivered_quantity,
-                    docket_amount=reconciled_line.delivery_net_amount,
+                    product_code=(
+                        invoice_line.product_code
+                        if invoice_line is not None
+                        else docket_line.product_code
+                        if docket_line is not None
+                        else reconciled_line.product_code
+                    ),
+                    description=(
+                        invoice_line.description
+                        if invoice_line is not None
+                        else docket_line.description
+                        if docket_line is not None
+                        else reconciled_line.description
+                    ),
+                    invoice_quantity=invoice_line.quantity if invoice_line is not None else None,
+                    invoice_amount=invoice_line.net_amount if invoice_line is not None else None,
+                    docket_quantity=(
+                        docket_line.quantity_delivered
+                        if docket_line is not None
+                        else reconciled_line.delivered_quantity
+                    ),
+                    docket_amount=(
+                        docket_line.extended_amount
+                        if docket_line is not None
+                        else reconciled_line.delivery_net_amount
+                    ),
                     quantity_variance=reconciled_line.variance_quantity,
                     amount_variance=reconciled_line.variance_amount,
                     match_status=reconciled_line.status,
                     final_comment=self._build_final_comment(reconciled_line),
                 )
             )
-            row_number += 1
-
-        for reconciled_line in reconciliation.reconciled_lines:
-            if reconciled_line.invoice_line_number is not None:
-                continue
-
-            rows.append(
-                ReconciliationExportRow(
-                    row_number=row_number,
-                    invoice_number=invoice.header.invoice_number,
-                    invoice_date=invoice.header.invoice_date,
-                    docket_number=docket.docket_number,
-                    docket_line_number=reconciled_line.docket_line_number,
-                    product_code=reconciled_line.product_code,
-                    description=reconciled_line.description,
-                    docket_quantity=reconciled_line.delivered_quantity,
-                    docket_amount=reconciled_line.delivery_net_amount,
-                    quantity_variance=reconciled_line.variance_quantity,
-                    amount_variance=reconciled_line.variance_amount,
-                    match_status=reconciled_line.status,
-                    final_comment=self._build_final_comment(reconciled_line),
-                )
-            )
-            row_number += 1
 
         return rows
 
     def to_csv_row(self, row: ReconciliationExportRow) -> dict[str, str]:
+        mismatch = self._is_mismatch(row.match_status)
         return {
-            "Invoice Number": row.invoice_number,
-            "Invoice Date": str(row.invoice_date),
-            "Docket Number": row.docket_number or "",
-            "Invoice Line": self._stringify(row.invoice_line_number),
-            "Docket Line": self._stringify(row.docket_line_number),
-            "SKU": row.product_code or "",
-            "Description": row.description,
-            "Invoice Quantity": self._stringify(row.invoice_quantity),
-            "Invoice Amount": self._stringify(row.invoice_amount),
-            "Docket Quantity": self._stringify(row.docket_quantity),
-            "Docket Amount": self._stringify(row.docket_amount),
-            "Quantity Variance": self._stringify(row.quantity_variance),
-            "Amount Variance": self._stringify(row.amount_variance),
-            "Match Status": row.match_status.value,
-            "Final Comment": row.final_comment,
+            "Product Code": row.product_code or "",
+            "Product name": row.description,
+            "Quantity - Invoice": self._stringify(row.invoice_quantity),
+            "Quantity - Docket": self._stringify(row.docket_quantity),
+            "Amount - Invoice": self._stringify(row.invoice_amount),
+            "Amount - Docket": self._stringify(row.docket_amount),
+            "Mismatch (Yes/No)": "Yes" if mismatch else "No",
+            "Comment on the Mismatch": row.final_comment if mismatch else "",
         }
 
     def _build_final_comment(self, line: ReconciledLine) -> str:
@@ -152,6 +120,9 @@ class ReconciliationExportMapper:
 
     def _stringify(self, value: object | None) -> str:
         return "" if value is None else str(value)
+
+    def _is_mismatch(self, status: MatchStatus) -> bool:
+        return status in {MatchStatus.MISMATCH, MatchStatus.REVIEW_REQUIRED}
 
 
 reconciliation_export_mapper = ReconciliationExportMapper()

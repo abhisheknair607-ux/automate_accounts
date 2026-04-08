@@ -64,12 +64,30 @@ class AccountingExportMapper:
         reconciliation: ReconciliationResult,
         template: AccountingTemplateDefinition,
     ) -> list[AccountingExportRow]:
-        line_lookup = {line.invoice_line_number: line for line in reconciliation.reconciled_lines}
+        invoice_line_lookup = {line.line_number: line for line in invoice.lines}
+        docket_line_lookup = {line.line_number: line for line in docket.lines}
         rows: list[AccountingExportRow] = []
 
-        for idx, invoice_line in enumerate(invoice.lines, start=1):
-            reconciled_line = line_lookup.get(invoice_line.line_number)
-            pnl_mapping = self._pnl_mapping(invoice_line.department_code, invoice_line.description)
+        for idx, reconciled_line in enumerate(reconciliation.reconciled_lines, start=1):
+            invoice_line = (
+                invoice_line_lookup.get(reconciled_line.invoice_line_number)
+                if reconciled_line.invoice_line_number is not None
+                else None
+            )
+            docket_line = (
+                docket_line_lookup.get(reconciled_line.docket_line_number)
+                if reconciled_line.docket_line_number is not None
+                else None
+            )
+            department_code = invoice_line.department_code if invoice_line is not None else None
+            description = (
+                invoice_line.description
+                if invoice_line is not None
+                else docket_line.description
+                if docket_line is not None
+                else reconciled_line.description
+            )
+            pnl_mapping = self._pnl_mapping(department_code, description)
             final_comment = self._final_comment(reconciled_line)
             reconciliation_notes = self._reconciliation_notes(reconciled_line)
             template_values = {
@@ -86,11 +104,17 @@ class AccountingExportMapper:
                 "Supplier Account": invoice.header.account_number,
                 "Store Number": invoice.header.store_number,
                 "Docket Number": docket.docket_number,
-                "SKU": invoice_line.product_code,
-                "Description": invoice_line.description,
-                "Department": invoice_line.department_code,
-                "Invoiced Qty": str(invoice_line.quantity),
-                "Invoice Quantity": str(invoice_line.quantity),
+                "SKU": (
+                    invoice_line.product_code
+                    if invoice_line is not None
+                    else docket_line.product_code
+                    if docket_line is not None
+                    else reconciled_line.product_code
+                ),
+                "Description": description,
+                "Department": department_code,
+                "Invoiced Qty": str(invoice_line.quantity) if invoice_line is not None else "",
+                "Invoice Quantity": str(invoice_line.quantity) if invoice_line is not None else "",
                 "Delivered Qty": str(reconciled_line.delivered_quantity)
                 if reconciled_line and reconciled_line.delivered_quantity is not None
                 else "",
@@ -100,8 +124,8 @@ class AccountingExportMapper:
                 "Quantity Variance": str(reconciled_line.variance_quantity)
                 if reconciled_line and reconciled_line.variance_quantity is not None
                 else "",
-                "Unit Price": str(invoice_line.unit_price),
-                "Invoice Net": str(invoice_line.net_amount),
+                "Unit Price": str(invoice_line.unit_price) if invoice_line is not None else "",
+                "Invoice Net": str(invoice_line.net_amount) if invoice_line is not None else "",
                 "Delivery Net": str(reconciled_line.delivery_net_amount)
                 if reconciled_line and reconciled_line.delivery_net_amount is not None
                 else "",
@@ -111,13 +135,11 @@ class AccountingExportMapper:
                 "Amount Variance": str(reconciled_line.variance_amount)
                 if reconciled_line and reconciled_line.variance_amount is not None
                 else "",
-                "VAT Rate": str(invoice_line.vat_rate),
-                "VAT Amount": str(invoice_line.vat_amount),
-                "Gross Amount": str(invoice_line.gross_amount),
-                "Match Status": (reconciled_line.status if reconciled_line else MatchStatus.REVIEW_REQUIRED).value,
-                "Exception Reasons": ",".join(
-                    reason.value for reason in (reconciled_line.reason_codes if reconciled_line else [])
-                ),
+                "VAT Rate": str(invoice_line.vat_rate) if invoice_line is not None else "",
+                "VAT Amount": str(invoice_line.vat_amount) if invoice_line is not None else "",
+                "Gross Amount": str(invoice_line.gross_amount) if invoice_line is not None else "",
+                "Match Status": reconciled_line.status.value,
+                "Exception Reasons": ",".join(reason.value for reason in reconciled_line.reason_codes),
                 "Final Comment": final_comment,
                 "Reconciliation Notes": reconciliation_notes,
                 "Approval Status": "approved" if reconciliation.approved else "review_required",
@@ -132,19 +154,19 @@ class AccountingExportMapper:
                     account_number=invoice.header.account_number,
                     store_number=invoice.header.store_number,
                     docket_number=docket.docket_number,
-                    product_code=invoice_line.product_code,
-                    description=invoice_line.description,
-                    department_code=invoice_line.department_code,
-                    invoiced_quantity=invoice_line.quantity,
-                    delivered_quantity=reconciled_line.delivered_quantity if reconciled_line else None,
-                    unit_price=invoice_line.unit_price,
-                    invoice_net_amount=invoice_line.net_amount,
-                    delivery_net_amount=reconciled_line.delivery_net_amount if reconciled_line else None,
-                    vat_rate=invoice_line.vat_rate,
-                    vat_amount=invoice_line.vat_amount,
-                    gross_amount=invoice_line.gross_amount,
-                    match_status=reconciled_line.status if reconciled_line else MatchStatus.REVIEW_REQUIRED,
-                    exception_reasons=reconciled_line.reason_codes if reconciled_line else [],
+                    product_code=template_values["SKU"] or None,
+                    description=description,
+                    department_code=department_code,
+                    invoiced_quantity=invoice_line.quantity if invoice_line is not None else None,
+                    delivered_quantity=reconciled_line.delivered_quantity,
+                    unit_price=invoice_line.unit_price if invoice_line is not None else None,
+                    invoice_net_amount=invoice_line.net_amount if invoice_line is not None else None,
+                    delivery_net_amount=reconciled_line.delivery_net_amount,
+                    vat_rate=invoice_line.vat_rate if invoice_line is not None else None,
+                    vat_amount=invoice_line.vat_amount if invoice_line is not None else None,
+                    gross_amount=invoice_line.gross_amount if invoice_line is not None else None,
+                    match_status=reconciled_line.status,
+                    exception_reasons=reconciled_line.reason_codes,
                     approval_status="approved" if reconciliation.approved else "review_required",
                     template_values={
                         column.column_name: template_values.get(column.column_name, column.default_value or "")

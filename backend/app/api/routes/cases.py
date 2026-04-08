@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, select
@@ -19,15 +21,21 @@ from app.schemas.api import (
     CaseDetailResponse,
     CaseSummaryResponse,
     DocumentResponse,
+    EditableDocketRow,
+    EditableInvoiceRow,
     ExtractedDocumentResponse,
     ExtractionBatchResponse,
     ExtractionRequest,
+    ManualReconciliationRequest,
     ReconciliationRequest,
     ReconciliationResponse,
+    UpdateDocketRequest,
+    UpdateInvoiceRequest,
 )
-from app.schemas.canonical import FieldConfidence
+from app.schemas.canonical import CanonicalInvoice, DeliveryDocket, FieldConfidence
 from app.services.extraction.service import extraction_service
 from app.services.ingestion.classifier import document_classifier
+from app.services.persistence.canonical import canonical_persistence_service
 from app.services.reconciliation.service import reconciliation_service
 from app.services.storage.local import local_storage_service
 
@@ -147,6 +155,32 @@ def reconcile_case(
     return ReconciliationResponse(**jsonable_encoder(run), issues=issues)
 
 
+@router.post("/{case_id}/reconciliation/manual", response_model=ReconciliationResponse)
+def apply_manual_reconciliation(
+    case_id: str,
+    request: ManualReconciliationRequest,
+    db: Session = Depends(get_db),
+) -> ReconciliationResponse:
+    try:
+        run = reconciliation_service.run_manual(
+            db,
+            case_id=case_id,
+            base_reconciliation_run_id=request.base_reconciliation_run_id,
+            pairs=[
+                (pair.invoice_line_number, pair.docket_line_number, pair.position)
+                for pair in request.pairs
+            ],
+            config=request.config,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    issues = db.scalars(
+        select(ReconciliationIssueRecord).where(ReconciliationIssueRecord.reconciliation_run_id == run.id)
+    ).all()
+    return ReconciliationResponse(**jsonable_encoder(run), issues=issues)
+
+
 @router.get("/{case_id}", response_model=CaseDetailResponse)
 def get_case(case_id: str, db: Session = Depends(get_db)) -> CaseDetailResponse:
     return _build_case_detail(db, case_id)
@@ -168,6 +202,54 @@ def get_invoice(case_id: str, db: Session = Depends(get_db)) -> ExtractedDocumen
     )
 
 
+@router.put("/{case_id}/invoice", response_model=ExtractedDocumentResponse)
+def update_invoice(
+    case_id: str,
+    request: UpdateInvoiceRequest,
+    db: Session = Depends(get_db),
+) -> ExtractedDocumentResponse:
+    document = db.scalar(
+        select(DocumentRecord)
+        .where(DocumentRecord.case_id == case_id, DocumentRecord.doc_type == "invoice")
+        .order_by(DocumentRecord.created_at.desc())
+    )
+    invoice_record = db.scalar(
+        select(InvoiceRecord).where(InvoiceRecord.case_id == case_id).order_by(InvoiceRecord.created_at.desc())
+    )
+    if document is None or invoice_record is None:
+        raise HTTPException(status_code=404, detail="Invoice document not found.")
+
+    try:
+        updated_invoice = _apply_invoice_row_edits(
+            CanonicalInvoice.model_validate(invoice_record.canonical_payload),
+            request.rows,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    canonical_persistence_service.persist_invoice(
+        db,
+        case_id=case_id,
+        document=document,
+        extraction_run=None,
+        invoice=updated_invoice,
+    )
+    document.latest_extraction_payload = jsonable_encoder(updated_invoice.model_dump(mode="json"))
+    document.extraction_status = "completed"
+
+    case = db.get(CaseRecord, case_id)
+    if case is not None:
+        case.status = "extracted"
+
+    db.commit()
+    db.refresh(document)
+    return ExtractedDocumentResponse(
+        document=document,
+        payload=document.latest_extraction_payload,
+        low_confidence_fields=[FieldConfidence.model_validate(item) for item in document.low_confidence_fields or []],
+    )
+
+
 @router.get("/{case_id}/delivery-docket", response_model=ExtractedDocumentResponse)
 def get_delivery_docket(case_id: str, db: Session = Depends(get_db)) -> ExtractedDocumentResponse:
     document = db.scalar(
@@ -177,6 +259,56 @@ def get_delivery_docket(case_id: str, db: Session = Depends(get_db)) -> Extracte
     )
     if document is None:
         raise HTTPException(status_code=404, detail="Delivery docket document not found.")
+    return ExtractedDocumentResponse(
+        document=document,
+        payload=document.latest_extraction_payload,
+        low_confidence_fields=[FieldConfidence.model_validate(item) for item in document.low_confidence_fields or []],
+    )
+
+
+@router.put("/{case_id}/delivery-docket", response_model=ExtractedDocumentResponse)
+def update_delivery_docket(
+    case_id: str,
+    request: UpdateDocketRequest,
+    db: Session = Depends(get_db),
+) -> ExtractedDocumentResponse:
+    document = db.scalar(
+        select(DocumentRecord)
+        .where(DocumentRecord.case_id == case_id, DocumentRecord.doc_type == "delivery_docket")
+        .order_by(DocumentRecord.created_at.desc())
+    )
+    docket_record = db.scalar(
+        select(DeliveryDocketRecord)
+        .where(DeliveryDocketRecord.case_id == case_id)
+        .order_by(DeliveryDocketRecord.created_at.desc())
+    )
+    if document is None or docket_record is None:
+        raise HTTPException(status_code=404, detail="Delivery docket document not found.")
+
+    try:
+        updated_docket = _apply_docket_row_edits(
+            DeliveryDocket.model_validate(docket_record.canonical_payload),
+            request.rows,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    canonical_persistence_service.persist_delivery_docket(
+        db,
+        case_id=case_id,
+        document=document,
+        extraction_run=None,
+        docket=updated_docket,
+    )
+    document.latest_extraction_payload = jsonable_encoder(updated_docket.model_dump(mode="json"))
+    document.extraction_status = "completed"
+
+    case = db.get(CaseRecord, case_id)
+    if case is not None:
+        case.status = "extracted"
+
+    db.commit()
+    db.refresh(document)
     return ExtractedDocumentResponse(
         document=document,
         payload=document.latest_extraction_payload,
@@ -270,3 +402,127 @@ def _build_case_detail(db: Session, case_id: str) -> CaseDetailResponse:
         latest_exception_case=latest_exception_case,
         exports=[jsonable_encoder(export_record) for export_record in exports],
     )
+
+
+def _parse_decimal(value: str, *, allow_none: bool = False) -> Decimal | None:
+    normalized = value.strip().replace(",", "")
+    if not normalized:
+        return None if allow_none else Decimal("0.00")
+    try:
+        return Decimal(normalized)
+    except InvalidOperation as exc:
+        raise ValueError(f"'{value}' is not a valid number.") from exc
+
+
+def _append_manual_edit_note(notes: list[str]) -> list[str]:
+    note = "Manually edited in the local workspace UI."
+    return notes if note in notes else [*notes, note]
+
+
+def _apply_invoice_row_edits(invoice: CanonicalInvoice, rows: list[EditableInvoiceRow]) -> CanonicalInvoice:
+    payload = invoice.model_dump(mode="python")
+    existing_lines = payload.get("lines", [])
+    supplier_name = next((row.supplier.strip() for row in rows if row.supplier.strip()), invoice.supplier.name)
+
+    updated_lines: list[dict] = []
+    subtotal = Decimal("0.00")
+    tax_total = Decimal("0.00")
+    gross_total = Decimal("0.00")
+
+    for index, row in enumerate(rows, start=1):
+        quantity = _parse_decimal(row.quantity_invoice) or Decimal("0.00")
+        net_amount = _parse_decimal(row.pre_amount_invoice) or Decimal("0.00")
+        vat_amount = _parse_decimal(row.vat_invoice) or Decimal("0.00")
+        gross_amount = _parse_decimal(row.total_invoice) or Decimal("0.00")
+        line_payload = existing_lines[index - 1] if index - 1 < len(existing_lines) else {}
+        unit_price = (
+            (net_amount / quantity).quantize(Decimal("0.0001"))
+            if quantity != 0
+            else Decimal("0.0000")
+        )
+        vat_rate = (
+            ((vat_amount / net_amount) * Decimal("100")).quantize(Decimal("0.0001"))
+            if net_amount != 0
+            else Decimal("0.0000")
+        )
+        updated_lines.append(
+            {
+                **line_payload,
+                "line_number": index,
+                "product_code": row.product_code.strip() or None if row.product_code else None,
+                "description": row.product_name.strip() or f"Line {index}",
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "extended_amount": net_amount,
+                "net_amount": net_amount,
+                "vat_rate": vat_rate,
+                "vat_amount": vat_amount,
+                "gross_amount": gross_amount,
+                "confidence_scores": line_payload.get("confidence_scores", {}),
+            }
+        )
+        subtotal += net_amount
+        tax_total += vat_amount
+        gross_total += gross_amount
+
+    payload["supplier"] = {
+        **payload.get("supplier", {}),
+        "name": supplier_name,
+        "legal_name": payload.get("supplier", {}).get("legal_name") or supplier_name,
+    }
+    payload["header"] = {
+        **payload.get("header", {}),
+        "supplier_name": supplier_name,
+        "subtotal_amount": subtotal,
+        "tax_total": tax_total,
+        "gross_total": gross_total,
+    }
+    payload["lines"] = updated_lines
+    payload["audit"] = {
+        **payload.get("audit", {}),
+        "notes": _append_manual_edit_note(list(payload.get("audit", {}).get("notes", []))),
+    }
+    return CanonicalInvoice.model_validate(payload)
+
+
+def _apply_docket_row_edits(docket: DeliveryDocket, rows: list[EditableDocketRow]) -> DeliveryDocket:
+    payload = docket.model_dump(mode="python")
+    existing_lines = payload.get("lines", [])
+    supplier_name = next((row.supplier.strip() for row in rows if row.supplier.strip()), docket.supplier_name)
+
+    updated_lines: list[dict] = []
+    subtotal = Decimal("0.00")
+
+    for index, row in enumerate(rows, start=1):
+        quantity = _parse_decimal(row.quantity_docket) or Decimal("0.00")
+        extended_amount = _parse_decimal(row.amount_docket, allow_none=True)
+        line_payload = existing_lines[index - 1] if index - 1 < len(existing_lines) else {}
+        expected_unit_price = (
+            (extended_amount / quantity).quantize(Decimal("0.0001"))
+            if extended_amount is not None and quantity != 0
+            else None
+        )
+        updated_lines.append(
+            {
+                **line_payload,
+                "line_number": index,
+                "product_code": row.product_code.strip() or None if row.product_code else None,
+                "description": row.product_name.strip() or f"Line {index}",
+                "quantity_delivered": quantity,
+                "expected_unit_price": expected_unit_price,
+                "extended_amount": extended_amount,
+                "confidence_scores": line_payload.get("confidence_scores", {}),
+            }
+        )
+        if extended_amount is not None:
+            subtotal += extended_amount
+
+    payload["supplier_name"] = supplier_name
+    payload["subtotal_amount"] = subtotal
+    payload["gross_total"] = subtotal + (payload.get("tax_total") or Decimal("0.00"))
+    payload["lines"] = updated_lines
+    payload["audit"] = {
+        **payload.get("audit", {}),
+        "notes": _append_manual_edit_note(list(payload.get("audit", {}).get("notes", []))),
+    }
+    return DeliveryDocket.model_validate(payload)

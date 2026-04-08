@@ -1,11 +1,6 @@
-"use client";
-
-import { useParams } from "next/navigation";
-
-import { CaseSectionView } from "@/components/case-section-view";
+import { redirect } from "next/navigation";
 
 
-export default function ExceptionsPage() {
-  const { caseId } = useParams<{ caseId: string }>();
-  return <CaseSectionView caseId={caseId} section="exceptions" />;
+export default function ExceptionsPage({ params }: { params: { caseId: string } }) {
+  redirect(`/cases/${params.caseId}/reconciliation`);
 }

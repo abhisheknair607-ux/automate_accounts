@@ -8,7 +8,6 @@ const sections = [
   { href: "/invoice", label: "Invoice" },
   { href: "/docket", label: "Docket" },
   { href: "/reconciliation", label: "Reconciliation" },
-  { href: "/exceptions", label: "Exceptions" },
   { href: "/exports", label: "Exports" }
 ];
 

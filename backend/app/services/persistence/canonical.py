@@ -22,7 +22,7 @@ class CanonicalPersistenceService:
         *,
         case_id: str,
         document: DocumentRecord,
-        extraction_run: ExtractionRunRecord,
+        extraction_run: ExtractionRunRecord | None,
         invoice: CanonicalInvoice,
     ) -> InvoiceRecord:
         existing = db.scalar(select(InvoiceRecord).where(InvoiceRecord.document_id == document.id))
@@ -30,7 +30,8 @@ class CanonicalPersistenceService:
             existing = InvoiceRecord(case_id=case_id, document_id=document.id)
             db.add(existing)
 
-        existing.extraction_run_id = extraction_run.id
+        if extraction_run is not None:
+            existing.extraction_run_id = extraction_run.id
         existing.invoice_number = invoice.header.invoice_number
         existing.invoice_date = invoice.header.invoice_date
         existing.account_number = invoice.header.account_number
@@ -77,7 +78,7 @@ class CanonicalPersistenceService:
         *,
         case_id: str,
         document: DocumentRecord,
-        extraction_run: ExtractionRunRecord,
+        extraction_run: ExtractionRunRecord | None,
         docket: DeliveryDocket,
     ) -> DeliveryDocketRecord:
         existing = db.scalar(
@@ -87,7 +88,8 @@ class CanonicalPersistenceService:
             existing = DeliveryDocketRecord(case_id=case_id, document_id=document.id)
             db.add(existing)
 
-        existing.extraction_run_id = extraction_run.id
+        if extraction_run is not None:
+            existing.extraction_run_id = extraction_run.id
         existing.docket_number = docket.docket_number
         existing.docket_date = docket.docket_date
         existing.account_number = docket.account_number

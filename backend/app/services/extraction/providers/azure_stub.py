@@ -87,6 +87,24 @@ class AzureDocumentIntelligenceProvider(DocumentExtractionProvider):
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
 
+    def _provider_display_name(self) -> str:
+        return "Azure"
+
+    def _processed_with_note(self, model_id: str) -> str:
+        return f"Processed with {self._provider_display_name()} model '{model_id}'."
+
+    def _missing_delivery_docket_number_message(self) -> str:
+        return (
+            f"{self._provider_display_name()} layout extraction could not determine "
+            "a delivery docket number."
+        )
+
+    def _missing_delivery_docket_date_message(self) -> str:
+        return (
+            f"{self._provider_display_name()} layout extraction could not determine "
+            "a delivery docket date."
+        )
+
     def extract(self, context: DocumentExtractionContext) -> ProviderExtractionResult:
         self._ensure_configuration()
         model_id, analysis = self._analyze_with_azure(context)
@@ -261,11 +279,11 @@ class AzureDocumentIntelligenceProvider(DocumentExtractionProvider):
                 store_number_page = delivery_reference_page
 
         if not invoice_number:
-            raise ValueError("Azure Document Intelligence could not extract an invoice number.")
+            raise ValueError(f"{self._provider_display_name()} could not extract an invoice number.")
         if invoice_date is None:
-            raise ValueError("Azure Document Intelligence could not extract an invoice date.")
+            raise ValueError(f"{self._provider_display_name()} could not extract an invoice date.")
         if subtotal_amount is None or tax_total is None or gross_total is None:
-            raise ValueError("Azure Document Intelligence could not extract invoice totals.")
+            raise ValueError(f"{self._provider_display_name()} could not extract invoice totals.")
 
         supplier_name = supplier_name or "Unknown Supplier"
         if not supplier_name_confidence:
@@ -402,7 +420,7 @@ class AzureDocumentIntelligenceProvider(DocumentExtractionProvider):
                 extracted_at=datetime.now(UTC),
                 page_count=page_count or None,
                 mock_data=False,
-                notes=[f"Processed with Azure model '{model_id}'."],
+                notes=[self._processed_with_note(model_id)],
             ),
         )
         return ProviderExtractionResult(
@@ -526,9 +544,9 @@ class AzureDocumentIntelligenceProvider(DocumentExtractionProvider):
             gross_confidence = min(subtotal_confidence or 0.6, tax_confidence or 0.6)
 
         if not docket_number:
-            raise ValueError("Azure layout extraction could not determine a delivery docket number.")
+            raise ValueError(self._missing_delivery_docket_number_message())
         if docket_date is None:
-            raise ValueError("Azure layout extraction could not determine a delivery docket date.")
+            raise ValueError(self._missing_delivery_docket_date_message())
 
         subtotal_amount = subtotal_amount or ZERO
         tax_total = tax_total or ZERO
@@ -598,7 +616,7 @@ class AzureDocumentIntelligenceProvider(DocumentExtractionProvider):
                 extracted_at=datetime.now(UTC),
                 page_count=page_count or None,
                 mock_data=False,
-                notes=[f"Processed with Azure model '{model_id}'."],
+                notes=[self._processed_with_note(model_id)],
             ),
         )
         return ProviderExtractionResult(
@@ -630,7 +648,7 @@ class AzureDocumentIntelligenceProvider(DocumentExtractionProvider):
     ) -> ProviderExtractionResult:
         low_confidence_fields: list[FieldConfidence] = []
         page_count = len(analysis.get("pages") or [])
-        notes = [f"Processed with Azure model '{model_id}'."]
+        notes = [self._processed_with_note(model_id)]
 
         detected_headers = self._extract_template_headers(analysis)
         columns: list[AccountingTemplateColumn] = []
@@ -936,7 +954,10 @@ class AzureDocumentIntelligenceProvider(DocumentExtractionProvider):
             normalized = self._normalize_label(header)
             if not normalized:
                 continue
-            if any(token in normalized for token in ("description", "item description", "product description")):
+            if any(
+                token in normalized
+                for token in ("description", "item description", "product description", "product")
+            ):
                 mapping["description"] = index
                 continue
             if any(token in normalized for token in ("qty", "quantity")):

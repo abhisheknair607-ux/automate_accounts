@@ -22,6 +22,18 @@ class ReconciliationRequest(ApiBaseModel):
     config: ReconciliationConfig | None = None
 
 
+class ManualReconciliationPair(ApiBaseModel):
+    invoice_line_number: int
+    docket_line_number: int
+    position: int = Field(ge=0)
+
+
+class ManualReconciliationRequest(ApiBaseModel):
+    base_reconciliation_run_id: str
+    config: ReconciliationConfig | None = None
+    pairs: list[ManualReconciliationPair] = Field(default_factory=list)
+
+
 class ExportRequest(ApiBaseModel):
     export_format: Literal["csv", "json", "reco_csv", "reco_excel", "ocr_excel", "pnl_csv"] = "csv"
 
@@ -86,6 +98,32 @@ class ExtractedDocumentResponse(ApiBaseModel):
     document: DocumentResponse
     payload: dict[str, Any] | None = None
     low_confidence_fields: list[FieldConfidence] = Field(default_factory=list)
+
+
+class EditableInvoiceRow(ApiBaseModel):
+    supplier: str = ""
+    product_code: str | None = None
+    product_name: str = ""
+    quantity_invoice: str = ""
+    pre_amount_invoice: str = ""
+    vat_invoice: str = ""
+    total_invoice: str = ""
+
+
+class UpdateInvoiceRequest(ApiBaseModel):
+    rows: list[EditableInvoiceRow] = Field(default_factory=list)
+
+
+class EditableDocketRow(ApiBaseModel):
+    supplier: str = ""
+    product_code: str | None = None
+    product_name: str = ""
+    quantity_docket: str = ""
+    amount_docket: str = ""
+
+
+class UpdateDocketRequest(ApiBaseModel):
+    rows: list[EditableDocketRow] = Field(default_factory=list)
 
 
 class ReconciliationIssueResponse(ApiBaseModel):

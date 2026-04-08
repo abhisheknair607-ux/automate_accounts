@@ -53,7 +53,9 @@ It then:
 - `Alembic` initial migration
 - pluggable extraction provider interface
 - `mock` provider backed by realistic JSON fixtures from the supplied sample docs
+- `tesseract` provider for local OCR through an installed Tesseract binary
 - `ocr_space` provider for a free trial OCR flow using OCR.space
+- `google_document_ai` provider for Google Cloud Document AI processors
 - `azure_document_intelligence` provider for live Azure OCR/document extraction
 - configurable reconciliation tolerances and reason codes
 - local file storage abstraction that can be swapped for S3 later
@@ -126,6 +128,20 @@ Backend URL: `http://localhost:8000`
 
 API docs: `http://localhost:8000/docs`
 
+### Local OCR With Tesseract
+
+If you want local OCR without an external API:
+
+1. Install Tesseract OCR on your machine.
+2. Copy `.env.example` to `.env`
+3. Set:
+   `DEFAULT_EXTRACTION_PROVIDER=tesseract`
+   `TESSERACT_COMMAND=tesseract`
+4. If Tesseract is not on your `PATH`, point `TESSERACT_COMMAND` at the full executable path.
+5. Restart the backend
+
+The backend uses the same preprocessing and fallback heuristics as the OCR.space flow, but the OCR call runs locally through the Tesseract CLI instead of an HTTP API.
+
 ### Free Trial OCR With OCR.space
 
 If you want a free live OCR demo without Azure:
@@ -139,6 +155,23 @@ If you want a free live OCR demo without Azure:
 `helloworld` is OCR.space's shared demo key, so it is fine for a trial but can be throttled. For anything beyond a quick demo, create your own free OCR.space key and replace it.
 
 The backend preprocesses large images, rotates landscape scans when OCR quality is clearly better after rotation, and only renders the first plus last invoice PDF pages by default so the sample invoice stays lightweight on free OCR limits.
+
+### Google Document AI
+
+If you want Google Cloud OCR and parsing:
+
+1. Enable Document AI in your Google Cloud project and create processors.
+2. Set up Application Default Credentials locally.
+3. Copy `.env.example` to `.env`
+4. Set:
+   `DEFAULT_EXTRACTION_PROVIDER=google_document_ai`
+   `GOOGLE_DOCUMENT_AI_PROJECT_ID=your-gcp-project-id`
+   `GOOGLE_DOCUMENT_AI_LOCATION=us`
+   `GOOGLE_DOCUMENT_AI_INVOICE_PROCESSOR_ID=your-invoice-processor-id`
+   `GOOGLE_DOCUMENT_AI_LAYOUT_PROCESSOR_ID=your-layout-processor-id`
+5. Restart the backend
+
+Use an Invoice processor for invoice PDFs and a Layout parser processor for delivery dockets and template-style documents. The provider uses Google ADC for auth, so `gcloud auth application-default login` or `GOOGLE_APPLICATION_CREDENTIALS` must already be configured in your shell environment.
 
 ### Azure Document Intelligence
 

@@ -6,6 +6,7 @@ import { useEffect, useState, useTransition } from "react";
 import { CaseNav } from "@/components/case-nav";
 import { StatusPill } from "@/components/status-pill";
 import { api } from "@/lib/api";
+import { loadReconciliationConfig } from "@/lib/reconciliation-config";
 import type { CaseDetail } from "@/lib/types";
 
 
@@ -56,7 +57,7 @@ export function CaseOverview({ caseId }: { caseId: string }) {
         <div>
           <span className="eyebrow">Review Workspace</span>
           <h1>{detail.name || detail.id}</h1>
-          <p>Document ingestion, extraction, reconciliation, and raw OCR plus P&amp;L exports all stay in one case timeline.</p>
+          <p>Document ingestion, extraction, reconciliation, raw OCR audit output, and canonical exports all stay in one case timeline.</p>
         </div>
         <div className="hero-metrics">
           <div>
@@ -86,29 +87,33 @@ export function CaseOverview({ caseId }: { caseId: string }) {
             <button className="primary-button" disabled={isPending} onClick={() => trigger("Extract documents", () => api.extractCase(caseId))}>
               {busyAction === "Extract documents" ? "Extracting..." : "1. Extract documents"}
             </button>
-            <button className="secondary-button" disabled={isPending} onClick={() => trigger("Reconcile case", () => api.reconcileCase(caseId))}>
+            <button
+              className="secondary-button"
+              disabled={isPending}
+              onClick={() => trigger("Reconcile case", () => api.reconcileCase(caseId, loadReconciliationConfig(caseId)))}
+            >
               {busyAction === "Reconcile case" ? "Reconciling..." : "2. Reconcile case"}
             </button>
             <button
               className="secondary-button"
               disabled={isPending}
-              onClick={() => trigger("Create reconciliation export", () => api.createExport(caseId, "reco_excel"))}
+              onClick={() => trigger("Create canonical reconciliation export", () => api.createExport(caseId, "reco_excel"))}
             >
-              {busyAction === "Create reconciliation export" ? "Exporting..." : "3. Create reconciliation Excel"}
+              {busyAction === "Create canonical reconciliation export" ? "Exporting..." : "3. Create Canonical Reconciliation Excel"}
             </button>
             <button
               className="secondary-button"
               disabled={isPending}
-              onClick={() => trigger("Create raw OCR export", () => api.createExport(caseId, "ocr_excel"))}
+              onClick={() => trigger("Create raw OCR audit export", () => api.createExport(caseId, "ocr_excel"))}
             >
-              {busyAction === "Create raw OCR export" ? "Exporting..." : "4. Create raw OCR Excel"}
+              {busyAction === "Create raw OCR audit export" ? "Exporting..." : "4. Create Raw OCR Audit Excel"}
             </button>
             <button
               className="secondary-button"
               disabled={isPending}
-              onClick={() => trigger("Create P&L export", () => api.createExport(caseId, "pnl_csv"))}
+              onClick={() => trigger("Create canonical P&L export", () => api.createExport(caseId, "pnl_csv"))}
             >
-              {busyAction === "Create P&L export" ? "Exporting..." : "5. Create P&L CSV"}
+              {busyAction === "Create canonical P&L export" ? "Exporting..." : "5. Create Canonical P&L CSV"}
             </button>
           </div>
           {error ? <p className="error-banner">{error}</p> : null}
@@ -141,7 +146,6 @@ export function CaseOverview({ caseId }: { caseId: string }) {
             <Link href={`/cases/${caseId}/invoice`}>Open extracted invoice</Link>
             <Link href={`/cases/${caseId}/docket`}>Open extracted delivery docket</Link>
             <Link href={`/cases/${caseId}/reconciliation`}>Open reconciliation results</Link>
-            <Link href={`/cases/${caseId}/exceptions`}>Open exception review</Link>
             <Link href={`/cases/${caseId}/exports`}>Open exports</Link>
           </div>
         </div>

@@ -7,6 +7,11 @@ frontend/.next/
 frontend/node_modules/
 .netlify/
 run-logs/
+.claude/
+tesseract-*/
+frontend-dev*.log
+backend-dev*.log
+frontend/frontend-dev*.log
 __pycache__/
 .pytest_cache/
 .pytest_tmp/

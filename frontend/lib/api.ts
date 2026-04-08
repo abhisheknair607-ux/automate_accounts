@@ -1,4 +1,5 @@
 import { CaseDetail, CaseSummary } from "@/lib/types";
+import type { ReconciliationConfigInput } from "@/lib/reconciliation-config";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api";
 const TUNNEL_BYPASS_HEADER = "bypass-tunnel-reminder";
@@ -90,7 +91,39 @@ export const api = {
   listCases: () => request<CaseSummary[]>("/cases"),
   getCase: (caseId: string) => request<CaseDetail>(`/cases/${caseId}`),
   getInvoice: (caseId: string) => request<Record<string, unknown>>(`/cases/${caseId}/invoice`),
+  updateInvoice: (
+    caseId: string,
+    rows: {
+      supplier: string;
+      product_code: string;
+      product_name: string;
+      quantity_invoice: string;
+      pre_amount_invoice: string;
+      vat_invoice: string;
+      total_invoice: string;
+    }[]
+  ) =>
+    request<Record<string, unknown>>(`/cases/${caseId}/invoice`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows })
+    }),
   getDocket: (caseId: string) => request<Record<string, unknown>>(`/cases/${caseId}/delivery-docket`),
+  updateDocket: (
+    caseId: string,
+    rows: {
+      supplier: string;
+      product_code: string;
+      product_name: string;
+      quantity_docket: string;
+      amount_docket: string;
+    }[]
+  ) =>
+    request<Record<string, unknown>>(`/cases/${caseId}/delivery-docket`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows })
+    }),
   getReconciliation: (caseId: string) =>
     request<Record<string, unknown>>(`/cases/${caseId}/reconciliation`),
   getExceptions: (caseId: string) => request<Record<string, unknown>>(`/cases/${caseId}/exceptions`),
@@ -106,11 +139,31 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ force: true })
     }),
-  reconcileCase: (caseId: string) =>
+  reconcileCase: (
+    caseId: string,
+    config?: ReconciliationConfigInput
+  ) =>
     request<Record<string, unknown>>(`/cases/${caseId}/reconcile`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({})
+      body: JSON.stringify(config ? { config } : {})
+    }),
+  applyManualReconciliation: (
+    caseId: string,
+    requestBody: {
+      base_reconciliation_run_id: string;
+      config?: ReconciliationConfigInput;
+      pairs: {
+        invoice_line_number: number;
+        docket_line_number: number;
+        position: number;
+      }[];
+    }
+  ) =>
+    request<Record<string, unknown>>(`/cases/${caseId}/reconciliation/manual`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody)
     }),
   createExport: (caseId: string, exportFormat: "csv" | "json" | "reco_csv" | "reco_excel" | "ocr_excel" | "pnl_csv" = "csv") =>
     request<Record<string, unknown>>(`/exports/cases/${caseId}`, {

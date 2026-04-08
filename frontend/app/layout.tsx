@@ -14,11 +14,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <div className="site-shell">
-          <div className="site-chrome">
-            <span className="eyebrow">Retail Finance Operations</span>
-            <h1>Invoice Reconciliation Platform</h1>
-            <p>OCR extraction, reconciliation rules, exception handling, and accounting export in one MVP workspace.</p>
-          </div>
+        <div className="site-chrome">
+          <span className="eyebrow">Retail Finance Operations</span>
+          <h1>Invoice Reconciliation Platform</h1>
+          <p>OCR extraction, manual reconciliation review, and accounting export in one MVP workspace.</p>
+        </div>
           <main>{children}</main>
         </div>
       </body>

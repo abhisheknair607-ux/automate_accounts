@@ -118,3 +118,22 @@ def test_reconciliation_export_mapper_builds_invoice_first_rows_with_comments(fi
     assert rows[3].final_comment == "Only on docket"
     assert rows[3].invoice_quantity is None
     assert rows[3].docket_quantity == docket_lines[2].quantity_delivered
+
+    matched_csv_row = reconciliation_export_mapper.to_csv_row(rows[0])
+    mismatch_csv_row = reconciliation_export_mapper.to_csv_row(rows[1])
+    docket_only_csv_row = reconciliation_export_mapper.to_csv_row(rows[3])
+
+    assert matched_csv_row == {
+        "Product Code": rows[0].product_code or "",
+        "Product name": rows[0].description,
+        "Quantity - Invoice": str(rows[0].invoice_quantity),
+        "Quantity - Docket": str(rows[0].docket_quantity),
+        "Amount - Invoice": str(rows[0].invoice_amount),
+        "Amount - Docket": str(rows[0].docket_amount),
+        "Mismatch (Yes/No)": "No",
+        "Comment on the Mismatch": "",
+    }
+    assert mismatch_csv_row["Mismatch (Yes/No)"] == "Yes"
+    assert mismatch_csv_row["Comment on the Mismatch"] == "Quantity mismatch; Amount mismatch"
+    assert docket_only_csv_row["Amount - Invoice"] == ""
+    assert docket_only_csv_row["Amount - Docket"] == str(rows[3].docket_amount)

@@ -42,7 +42,7 @@ const titles: Record<Section, { eyebrow: string; heading: string; description: s
   exports: {
     eyebrow: "Exports",
     heading: "Export history",
-    description: "Raw OCR audit workbooks stay separate from canonical reconciliation workbooks and canonical P&L CSV outputs."
+    description: "Raw OCR review files stay separate from canonical reconciliation workbooks and canonical P&L CSV outputs."
   }
 };
 
@@ -80,9 +80,12 @@ type DocketWorkspaceRow = DocketTableRow & {
 
 type MergedWorkspaceRow = {
   id: string;
-  supplier: string;
-  productCode: string;
-  productName: string;
+  invoiceSupplier: string;
+  docketSupplier: string;
+  invoiceProductCode: string;
+  docketProductCode: string;
+  invoiceProductName: string;
+  docketProductName: string;
   quantityInvoice: string;
   preAmountInvoice: string;
   vatInvoice: string;
@@ -154,6 +157,10 @@ function asString(value: unknown): string {
     return "";
   }
   return String(value);
+}
+
+function normalizeReconciliationValue(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
 function invoiceRowsFromPayload(responsePayload: unknown): InvoiceTableRow[] {
@@ -264,6 +271,47 @@ function sortDocketRows(rows: DocketWorkspaceRow[]): DocketWorkspaceRow[] {
   return [...rows].sort((left, right) => left.lineNumber - right.lineNumber);
 }
 
+function sortMergedRows(rows: MergedWorkspaceRow[]): MergedWorkspaceRow[] {
+  const hasManualOrder = rows.some((row) => row.manualPairPosition !== null);
+  if (hasManualOrder) {
+    return [...rows].sort((left, right) => {
+      const leftPosition = left.manualPairPosition ?? Number.MAX_SAFE_INTEGER;
+      const rightPosition = right.manualPairPosition ?? Number.MAX_SAFE_INTEGER;
+      if (leftPosition !== rightPosition) {
+        return leftPosition - rightPosition;
+      }
+      return left.invoiceLineNumber - right.invoiceLineNumber;
+    });
+  }
+
+  return [...rows].sort((left, right) => {
+    const leftInvoiceCode = normalizeReconciliationValue(left.invoiceProductCode);
+    const rightInvoiceCode = normalizeReconciliationValue(right.invoiceProductCode);
+    const leftDocketCode = normalizeReconciliationValue(left.docketProductCode);
+    const rightDocketCode = normalizeReconciliationValue(right.docketProductCode);
+    const leftCodeMatch = leftInvoiceCode !== "" && leftInvoiceCode === leftDocketCode;
+    const rightCodeMatch = rightInvoiceCode !== "" && rightInvoiceCode === rightDocketCode;
+
+    if (leftCodeMatch !== rightCodeMatch) {
+      return leftCodeMatch ? -1 : 1;
+    }
+
+    const leftKey = leftInvoiceCode || leftDocketCode || normalizeReconciliationValue(left.invoiceProductName || left.docketProductName);
+    const rightKey =
+      rightInvoiceCode || rightDocketCode || normalizeReconciliationValue(right.invoiceProductName || right.docketProductName);
+
+    if (leftKey !== rightKey) {
+      return leftKey.localeCompare(rightKey);
+    }
+
+    if (left.invoiceLineNumber !== right.invoiceLineNumber) {
+      return left.invoiceLineNumber - right.invoiceLineNumber;
+    }
+
+    return left.docketLineNumber - right.docketLineNumber;
+  });
+}
+
 function buildInvoiceWorkspaceRow(
   line: Record<string, unknown>,
   supplier: string,
@@ -364,9 +412,12 @@ function buildReconciliationWorkspace(
       const rawManualPairPosition = reconciledLine.manual_pair_position;
       mergedRows.push({
         id: `merged-${invoiceLineNumber}-${docketLineNumber}`,
-        supplier: invoiceSupplier || docketSupplier,
-        productCode: asString(invoiceLine.product_code) || asString(docketLine.product_code) || asString(reconciledLine.product_code),
-        productName: asString(invoiceLine.description) || asString(docketLine.description) || asString(reconciledLine.description),
+        invoiceSupplier,
+        docketSupplier: docketSupplier || invoiceSupplier,
+        invoiceProductCode: asString(invoiceLine.product_code),
+        docketProductCode: asString(docketLine.product_code) || asString(reconciledLine.product_code),
+        invoiceProductName: asString(invoiceLine.description),
+        docketProductName: asString(docketLine.description) || asString(reconciledLine.description),
         quantityInvoice: asString(invoiceLine.quantity),
         preAmountInvoice: asString(invoiceLine.net_amount),
         vatInvoice: asString(invoiceLine.vat_amount),
@@ -412,7 +463,7 @@ function buildReconciliationWorkspace(
 
   return {
     baseReconciliationRunId: reconciliationRunId,
-    mergedRows,
+    mergedRows: sortMergedRows(mergedRows),
     unmatchedInvoiceRows: sortInvoiceRows(unmatchedInvoiceRows),
     unmatchedDocketRows: sortDocketRows(unmatchedDocketRows)
   };
@@ -434,9 +485,9 @@ function buildReconciliationDisplayRows(
     rows.push({
       id: `${row.id}-invoice`,
       source: "invoice",
-      supplier: row.supplier,
-      productCode: row.productCode,
-      productName: row.productName,
+      supplier: row.invoiceSupplier || row.docketSupplier,
+      productCode: row.invoiceProductCode || row.docketProductCode,
+      productName: row.invoiceProductName || row.docketProductName,
       quantityInvoice: row.quantityInvoice,
       preAmountInvoice: row.preAmountInvoice,
       vatInvoice: row.vatInvoice,
@@ -461,9 +512,9 @@ function buildReconciliationDisplayRows(
     rows.push({
       id: `${row.id}-docket`,
       source: "docket",
-      supplier: row.supplier,
-      productCode: row.productCode,
-      productName: row.productName,
+      supplier: row.docketSupplier || row.invoiceSupplier,
+      productCode: row.docketProductCode || row.invoiceProductCode,
+      productName: row.docketProductName || row.invoiceProductName,
       quantityInvoice: "",
       preAmountInvoice: "",
       vatInvoice: "",
@@ -568,6 +619,7 @@ function exportFormatLabel(value: string): string {
   const labels: Record<string, string> = {
     reco_excel: "Canonical Reconciliation Excel",
     reco_csv: "Canonical Reconciliation CSV",
+    ocr_html: "Raw OCR Review HTML",
     ocr_excel: "Raw OCR Audit Excel",
     pnl_csv: "Canonical P&L CSV",
     csv: "CSV Export",
@@ -580,6 +632,7 @@ function exportFormatHint(value: string): string {
   const hints: Record<string, string> = {
     reco_excel: "Structured workbook for reconciliation review.",
     reco_csv: "Flat reconciliation rows for quick downstream use.",
+    ocr_html: "Free-form OCR review with detected text, tables, and raw payload audit detail.",
     ocr_excel: "Raw OCR audit workbook from the provider output.",
     pnl_csv: "Canonical accounting export for the P&L workflow.",
     csv: "Generic CSV export.",
@@ -654,23 +707,39 @@ export function CaseSectionView({ caseId, section }: { caseId: string; section: 
 
     const loadSection = async () => {
       if (section === "reconciliation") {
-        const [reconciliationResponse, caseResponse] = await Promise.all([
-          endpointMap[section](caseId),
-          api.getCase(caseId)
-        ]);
-        return { sectionPayload: reconciliationResponse, casePayload: caseResponse };
+        try {
+          const [reconciliationResponse, caseResponse] = await Promise.all([
+            endpointMap[section](caseId),
+            api.getCase(caseId)
+          ]);
+          return { sectionPayload: reconciliationResponse, casePayload: caseResponse, autoReconciled: false };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "";
+          if (!message.includes("Reconciliation has not been run")) {
+            throw err;
+          }
+          await api.reconcileCase(caseId, loadReconciliationConfig(caseId));
+          const [reconciliationResponse, caseResponse] = await Promise.all([
+            endpointMap[section](caseId),
+            api.getCase(caseId)
+          ]);
+          return { sectionPayload: reconciliationResponse, casePayload: caseResponse, autoReconciled: true };
+        }
       }
       const sectionPayload = await endpointMap[section](caseId);
-      return { sectionPayload, casePayload: null };
+      return { sectionPayload, casePayload: null, autoReconciled: false };
     };
 
     loadSection()
-      .then(({ sectionPayload, casePayload }) => {
+      .then(({ sectionPayload, casePayload, autoReconciled }) => {
         if (cancelled) {
           return;
         }
         setPayload(sectionPayload);
         setCaseDetailPayload(casePayload);
+        if (autoReconciled) {
+          setSaveMessage("Initial reconciliation was prepared and grouped around matching product codes.");
+        }
       })
       .catch((err) => {
         if (!cancelled) {
@@ -866,9 +935,12 @@ export function CaseSectionView({ caseId, section }: { caseId: string; section: 
 
       const mergedRow: MergedWorkspaceRow = {
         id: `merged-${invoiceLineNumber}-${docketLineNumber}`,
-        supplier: invoiceRow.supplier || docketRow.supplier,
-        productCode: invoiceRow.productCode || docketRow.productCode,
-        productName: invoiceRow.productName || docketRow.productName,
+        invoiceSupplier: invoiceRow.supplier,
+        docketSupplier: docketRow.supplier,
+        invoiceProductCode: invoiceRow.productCode,
+        docketProductCode: docketRow.productCode,
+        invoiceProductName: invoiceRow.productName,
+        docketProductName: docketRow.productName,
         quantityInvoice: invoiceRow.quantityInvoice,
         preAmountInvoice: invoiceRow.preAmountInvoice,
         vatInvoice: invoiceRow.vatInvoice,
@@ -913,9 +985,9 @@ export function CaseSectionView({ caseId, section }: { caseId: string; section: 
       const invoiceRow: InvoiceWorkspaceRow = {
         id: `invoice-${mergedRow.invoiceLineNumber}`,
         lineNumber: mergedRow.invoiceLineNumber,
-        supplier: mergedRow.supplier,
-        productCode: mergedRow.productCode,
-        productName: mergedRow.productName,
+        supplier: mergedRow.invoiceSupplier,
+        productCode: mergedRow.invoiceProductCode,
+        productName: mergedRow.invoiceProductName,
         quantityInvoice: mergedRow.quantityInvoice,
         preAmountInvoice: mergedRow.preAmountInvoice,
         vatInvoice: mergedRow.vatInvoice,
@@ -926,9 +998,9 @@ export function CaseSectionView({ caseId, section }: { caseId: string; section: 
       const docketRow: DocketWorkspaceRow = {
         id: `docket-${mergedRow.docketLineNumber}`,
         lineNumber: mergedRow.docketLineNumber,
-        supplier: mergedRow.supplier,
-        productCode: mergedRow.productCode,
-        productName: mergedRow.productName,
+        supplier: mergedRow.docketSupplier,
+        productCode: mergedRow.docketProductCode,
+        productName: mergedRow.docketProductName,
         quantityDocket: mergedRow.quantityDocket,
         amountDocket: mergedRow.amountDocket,
         comment: "Pending manual reconciliation.",
@@ -1592,7 +1664,7 @@ export function CaseSectionView({ caseId, section }: { caseId: string; section: 
                             onDragStart={startDrag(row.dragItem)}
                             type="button"
                           >
-                            <span>⋮⋮</span>
+                            <span>::</span>
                           </button>
                         </td>
                         <td className="reconciliation-sticky-left reconciliation-col-source">

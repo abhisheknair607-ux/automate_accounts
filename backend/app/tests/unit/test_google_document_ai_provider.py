@@ -2,6 +2,8 @@ from pathlib import Path
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from app.core.config import Settings
 from app.schemas.canonical import DocumentType
 from app.services.extraction.registry import ExtractionProviderRegistry
@@ -228,3 +230,200 @@ def test_google_document_ai_builds_relaxed_delivery_docket_from_layout_only_cont
     assert result.canonical_payload["supplier_name"] == "Unknown Supplier"
     assert result.canonical_payload["subtotal_amount"] == Decimal("36.68")
     assert result.canonical_payload["lines"][0]["description"] == "MAXI TWIST CUP"
+
+
+def test_google_document_ai_backfills_sparse_invoice_lines_from_layout_tables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = make_provider()
+    invoice_analysis = {
+        "api_version": "invoice-processor",
+        "content": "ACME Foods\nInvoice Date: 2026-04-01\nSubtotal 23.30\nVAT 0.00\nTotal Due 23.30",
+        "pages": [{"page_number": 1, "lines": [{"content": "ACME Foods"}]}],
+        "tables": [],
+        "documents": [
+            {
+                "doc_type": "invoice",
+                "confidence": 0.94,
+                "fields": {
+                    "InvoiceId": {"value_string": "598527", "content": "598527", "confidence": 0.94},
+                    "InvoiceDate": {
+                        "value_date": "2026-04-01",
+                        "content": "2026-04-01",
+                        "confidence": 0.91,
+                    },
+                    "VendorName": {
+                        "value_string": "ACME Foods",
+                        "content": "ACME Foods",
+                        "confidence": 0.89,
+                    },
+                    "SubTotal": {
+                        "value_currency": {"amount": 23.30, "currency_code": "EUR"},
+                        "content": "23.30",
+                        "confidence": 0.88,
+                    },
+                    "TotalTax": {
+                        "value_currency": {"amount": 0.00, "currency_code": "EUR"},
+                        "content": "0.00",
+                        "confidence": 0.88,
+                    },
+                    "InvoiceTotal": {
+                        "value_currency": {"amount": 23.30, "currency_code": "EUR"},
+                        "content": "23.30",
+                        "confidence": 0.88,
+                    },
+                    "Items": {
+                        "value_array": [
+                            {
+                                "value_object": {
+                                    "Amount": {
+                                        "value_number": 23.30,
+                                        "content": "23.30",
+                                        "confidence": 0.91,
+                                        "bounding_regions": [{"page_number": 1}],
+                                    }
+                                },
+                                "confidence": 1.0,
+                                "bounding_regions": [{"page_number": 1}],
+                            }
+                        ],
+                        "confidence": 1.0,
+                    },
+                },
+            }
+        ],
+    }
+    layout_analysis = provider._document_to_analysis(
+        DocumentType.DELIVERY_DOCKET,
+        {
+            "document_layout": {
+                "blocks": [
+                    {
+                        "block_id": "1",
+                        "page_span": {"page_start": 1, "page_end": 1},
+                        "table_block": {
+                            "body_rows": [
+                                {
+                                    "cells": [
+                                        {"blocks": [{"text_block": {"text": "Product Code"}}]},
+                                        {"blocks": [{"text_block": {"text": "Description"}}]},
+                                        {"blocks": [{"text_block": {"text": "Qty"}}]},
+                                        {"blocks": [{"text_block": {"text": "Net"}}]},
+                                        {"blocks": [{"text_block": {"text": "VAT"}}]},
+                                        {"blocks": [{"text_block": {"text": "Total"}}]},
+                                    ]
+                                },
+                                {
+                                    "cells": [
+                                        {"blocks": [{"text_block": {"text": "ABC123"}}]},
+                                        {"blocks": [{"text_block": {"text": "BRAN HI-FIBRE"}}]},
+                                        {"blocks": [{"text_block": {"text": "2"}}]},
+                                        {"blocks": [{"text_block": {"text": "23.30"}}]},
+                                        {"blocks": [{"text_block": {"text": "0.00"}}]},
+                                        {"blocks": [{"text_block": {"text": "23.30"}}]},
+                                    ]
+                                },
+                            ]
+                        },
+                    }
+                ]
+            }
+        },
+    )
+
+    monkeypatch.setattr(
+        provider,
+        "_analyze_with_google_document_ai",
+        lambda context: ("invoice-processor", invoice_analysis),
+    )
+    monkeypatch.setattr(
+        provider,
+        "_analyze_with_google_document_ai_processor",
+        lambda context, processor_id, processor_version: ("layout-processor", layout_analysis),
+    )
+
+    context = DocumentExtractionContext(
+        document_id="abcd1234-0000-0000-0000-000000000000",
+        case_id="case-1",
+        source_filename="Invoice.pdf",
+        doc_type=DocumentType.INVOICE,
+        absolute_path=Path("Invoice.pdf"),
+    )
+
+    result = provider.extract(context)
+    line = result.canonical_payload["lines"][0]
+
+    assert line["product_code"] == "ABC123"
+    assert line["description"] == "BRAN HI-FIBRE"
+    assert line["quantity"] == Decimal("2")
+    assert result.raw_payload["layout_backfill_used"] is True
+    assert any("backfilled from Google Document AI layout tables" in note for note in result.canonical_payload["audit"]["notes"])
+
+
+def test_google_document_ai_extracts_invoice_identities_from_text_blocks() -> None:
+    provider = make_provider()
+    analysis = {
+        "content": "\n".join(
+            [
+                "Barcode",
+                "Product Description",
+                "08711327611436",
+                "08721274803778",
+                "HB 180ML MAXI TWIST X24X108DB",
+                "TWISTER 50ML MINIPINEAPP CL1 6MPX6X",
+                "Pack Size",
+                "Quantity",
+                "Unit Cost",
+            ]
+        ),
+        "pages": [{"page_number": 1, "lines": []}],
+        "tables": [],
+        "documents": [],
+    }
+
+    lines = provider._extract_invoice_line_identities_from_text(analysis)
+
+    assert len(lines) == 2
+    assert lines[0].product_code == "08711327611436"
+    assert lines[0].description == "HB 180ML MAXI TWIST X24X108DB"
+    assert lines[1].product_code == "08721274803778"
+    assert lines[1].description == "TWISTER 50ML MINIPINEAPP CL1 6MPX6X"
+
+
+def test_google_document_ai_backfills_invoice_quantities_from_text_blocks() -> None:
+    provider = make_provider()
+    analysis = {
+        "content": "\n".join(
+            [
+                "Barcode",
+                "Product Description",
+                "08711327611436",
+                "08721274803778",
+                "HB 180ML MAXI TWIST X24X108DB",
+                "TWISTER 50ML MINIPINEAPP CL1 6MPX6X",
+                "Pack Size",
+                "Quantity",
+                "Unit Cost",
+                "Dept Code",
+                "1",
+                "CS",
+                "1",
+                "€36.68",
+                "G038",
+                "1",
+                "CS",
+                "1",
+                "€14.51",
+                "G038",
+            ]
+        ),
+        "pages": [{"page_number": 1, "lines": []}],
+        "tables": [],
+        "documents": [],
+    }
+
+    lines = provider._extract_invoice_line_identities_from_text(analysis)
+
+    assert len(lines) == 2
+    assert lines[0].quantity == Decimal("1")
+    assert lines[1].quantity == Decimal("1")

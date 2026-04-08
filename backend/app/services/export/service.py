@@ -30,13 +30,14 @@ from app.services.export.accounting_mapper import accounting_export_mapper
 from app.services.export.ocr_extract_mapper import ocr_extract_mapper
 from app.services.export.pnl_template import load_builtin_pnl_template
 from app.services.export.raw_ocr_mapper import raw_ocr_export_mapper
+from app.services.export.raw_ocr_review_renderer import raw_ocr_review_renderer
 from app.services.export.reconciliation_mapper import reconciliation_export_mapper
 from app.services.storage.local import local_storage_service
 
 
 class ExportService:
     def create_export(self, db: Session, *, case_id: str, export_format: str) -> ExportRecord:
-        if export_format not in {"csv", "json", "reco_csv", "reco_excel", "ocr_excel", "pnl_csv"}:
+        if export_format not in {"csv", "json", "reco_csv", "reco_excel", "ocr_excel", "ocr_html", "pnl_csv"}:
             raise ValueError(f"Unsupported export format '{export_format}'.")
 
         case = db.get(CaseRecord, case_id)
@@ -112,6 +113,28 @@ class ExportService:
                 "export_name": "raw_ocr_workbook",
                 "sheet_names": ["invoice", "docket"],
                 "sheet_row_counts": {
+                    "invoice": len(invoice_rows),
+                    "docket": len(docket_rows),
+                },
+                "rows_preview": invoice_rows[:5],
+            }
+        elif export_format == "ocr_html":
+            if invoice_extraction_run is None or docket_extraction_run is None:
+                raise ValueError("Completed invoice and delivery docket extraction runs are required.")
+
+            invoice_rows = raw_ocr_export_mapper.map_rows(invoice_extraction_run.provider_payload)
+            docket_rows = raw_ocr_export_mapper.map_rows(docket_extraction_run.provider_payload)
+            content_type = "text/html"
+            output_path = self._write_raw_ocr_review_html(
+                case_id,
+                invoice_payload=invoice_extraction_run.provider_payload,
+                docket_payload=docket_extraction_run.provider_payload,
+            )
+            rows = invoice_rows + docket_rows
+            export_payload = {
+                "export_name": "raw_ocr_review_html",
+                "document_sections": ["invoice", "docket"],
+                "flattened_row_counts": {
                     "invoice": len(invoice_rows),
                     "docket": len(docket_rows),
                 },
@@ -231,6 +254,22 @@ class ExportService:
         docket_sheet = workbook.create_sheet(title="docket")
         self._write_sheet(docket_sheet, raw_ocr_export_mapper.columns, docket_rows)
         workbook.save(output_path)
+        return output_path
+
+    def _write_raw_ocr_review_html(
+        self,
+        case_id: str,
+        *,
+        invoice_payload: dict[str, object] | None,
+        docket_payload: dict[str, object] | None,
+    ) -> Path:
+        output_path = local_storage_service.build_export_path(case_id, "raw_ocr_review.html")
+        html = raw_ocr_review_renderer.render(
+            case_id=case_id,
+            invoice_payload=invoice_payload,
+            docket_payload=docket_payload,
+        )
+        output_path.write_text(html, encoding="utf-8")
         return output_path
 
     def _write_template_csv(

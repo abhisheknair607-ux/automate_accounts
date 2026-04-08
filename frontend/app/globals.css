@@ -591,13 +591,27 @@ select.table-input {
   background: transparent;
   color: var(--muted);
   cursor: grab;
-  padding: 0;
+  padding: 2px 4px;
   line-height: 1;
   font-size: 0.82rem;
+  transition: color 160ms ease, transform 160ms ease, opacity 160ms ease;
+  opacity: 0.72;
 }
 
 .drag-handle-button span {
-  letter-spacing: -0.18em;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.drag-handle-button:hover,
+.drag-handle-button:focus-visible {
+  color: var(--accent-strong);
+  opacity: 1;
+}
+
+.drag-handle-button:active {
+  cursor: grabbing;
+  transform: scale(0.96);
 }
 
 .source-chip {

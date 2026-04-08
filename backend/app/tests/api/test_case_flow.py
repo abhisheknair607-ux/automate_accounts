@@ -71,6 +71,21 @@ def test_full_api_flow(client, upload_payloads):
     assert "Mock OCR fixture" in invoice_values["notes[0]"]
     assert "Mock OCR fixture" in docket_values["notes[0]"]
 
+    raw_ocr_html_export = client.post(f"/api/exports/cases/{case_id}", json={"export_format": "ocr_html"})
+    assert raw_ocr_html_export.status_code == 200
+    raw_ocr_html_payload = raw_ocr_html_export.json()
+    assert raw_ocr_html_payload["export_payload"]["document_sections"] == ["invoice", "docket"]
+    assert raw_ocr_html_payload["export_payload"]["flattened_row_counts"]["invoice"] > 0
+    assert raw_ocr_html_payload["export_payload"]["flattened_row_counts"]["docket"] > 0
+
+    raw_ocr_html_download = client.get(f"/api/exports/{raw_ocr_html_payload['id']}/download")
+    assert raw_ocr_html_download.status_code == 200
+    assert "text/html" in raw_ocr_html_download.headers["content-type"]
+    assert "Invoice OCR Review" in raw_ocr_html_download.text
+    assert "Delivery Docket OCR Review" in raw_ocr_html_download.text
+    assert "Flattened raw payload audit" in raw_ocr_html_download.text
+    assert "Invoice_598527_Account_64876_Division_MRPI_Full_unlocked.pdf" in raw_ocr_html_download.text
+
     pnl_export = client.post(f"/api/exports/cases/{case_id}", json={"export_format": "pnl_csv"})
     assert pnl_export.status_code == 200
     pnl_export_payload = pnl_export.json()

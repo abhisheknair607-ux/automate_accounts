@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from datetime import UTC, datetime
 from io import BytesIO
 import mimetypes
@@ -14,6 +15,7 @@ from app.schemas.canonical import (
     DeliveryDocket,
     DocumentType,
     InvoiceHeader,
+    InvoiceLine,
     ProviderExtractionResult,
     Store,
     Supplier,
@@ -100,9 +102,14 @@ class GoogleDocumentAIExtractionProvider(AzureDocumentIntelligenceProvider):
 
         if context.doc_type == DocumentType.INVOICE:
             try:
-                return self._build_invoice_result(context, analysis, model_id)
+                result = self._build_invoice_result(context, analysis, model_id)
             except ValueError:
-                return self._build_invoice_result_relaxed(context, analysis, model_id)
+                result = self._build_invoice_result_relaxed(context, analysis, model_id)
+            return self._augment_invoice_result_with_layout(
+                context,
+                result,
+                invoice_model_id=model_id,
+            )
         if context.doc_type == DocumentType.DELIVERY_DOCKET:
             try:
                 return self._build_delivery_docket_result(context, analysis, model_id)
@@ -131,6 +138,20 @@ class GoogleDocumentAIExtractionProvider(AzureDocumentIntelligenceProvider):
     def _analyze_with_google_document_ai(
         self, context: DocumentExtractionContext
     ) -> tuple[str, dict[str, Any]]:
+        processor_id, processor_version = self._resolve_processor_for_doc_type(context.doc_type)
+        return self._analyze_with_google_document_ai_processor(
+            context,
+            processor_id=processor_id,
+            processor_version=processor_version,
+        )
+
+    def _analyze_with_google_document_ai_processor(
+        self,
+        context: DocumentExtractionContext,
+        *,
+        processor_id: str,
+        processor_version: str | None,
+    ) -> tuple[str, dict[str, Any]]:
         try:
             from google.api_core.client_options import ClientOptions
             from google.cloud import documentai
@@ -143,7 +164,6 @@ class GoogleDocumentAIExtractionProvider(AzureDocumentIntelligenceProvider):
 
         project_id = self._settings.google_document_ai_project_id
         location = self._settings.google_document_ai_location
-        processor_id, processor_version = self._resolve_processor_for_doc_type(context.doc_type)
         client_options = ClientOptions(api_endpoint=f"{location}-documentai.googleapis.com")
         client = documentai.DocumentProcessorServiceClient(client_options=client_options)
 
@@ -520,6 +540,485 @@ class GoogleDocumentAIExtractionProvider(AzureDocumentIntelligenceProvider):
                     }
                 )
         return items
+
+    def _augment_invoice_result_with_layout(
+        self,
+        context: DocumentExtractionContext,
+        result: ProviderExtractionResult,
+        *,
+        invoice_model_id: str,
+    ) -> ProviderExtractionResult:
+        if not self._invoice_lines_need_layout_backfill(result):
+            return result
+
+        layout_processor_id = self._settings.google_document_ai_layout_processor_id
+        layout_processor_version = self._settings.google_document_ai_layout_processor_version
+        if not layout_processor_id:
+            return result
+
+        invoice_processor = (
+            self._settings.google_document_ai_invoice_processor_id,
+            self._settings.google_document_ai_invoice_processor_version,
+        )
+        layout_processor = (layout_processor_id, layout_processor_version)
+        invoice = CanonicalInvoice.model_validate(result.canonical_payload)
+        merged_lines = invoice.lines
+        note: str | None = None
+        raw_payload = dict(result.raw_payload)
+        layout_low_confidence_fields: list[Any] = []
+
+        text_lines = self._extract_invoice_line_identities_from_text(
+            raw_payload.get("analysis_result") if isinstance(raw_payload.get("analysis_result"), dict) else {}
+        )
+        text_quantity_backfill_used = any(line.quantity != Decimal("0.00") for line in text_lines)
+        candidate_lines = self._merge_invoice_lines(invoice.lines, text_lines)
+        if self._count_meaningful_invoice_lines(candidate_lines) > self._count_meaningful_invoice_lines(
+            invoice.lines
+        ):
+            merged_lines = candidate_lines
+            note = (
+                "Invoice line items were backfilled from Google Document AI OCR text because "
+                "the invoice processor returned sparse row detail."
+            )
+            raw_payload["text_identity_backfill_used"] = True
+            if text_quantity_backfill_used:
+                raw_payload["text_quantity_backfill_used"] = True
+
+        if (
+            self._count_meaningful_invoice_lines(merged_lines) <= self._count_meaningful_invoice_lines(invoice.lines)
+            and layout_processor != invoice_processor
+        ):
+            try:
+                layout_model_id, layout_analysis = self._analyze_with_google_document_ai_processor(
+                    context,
+                    processor_id=layout_processor_id,
+                    processor_version=layout_processor_version,
+                )
+            except Exception:
+                layout_model_id = None
+                layout_analysis = None
+            else:
+                layout_lines = self._extract_invoice_lines_from_tables(
+                    layout_analysis,
+                    low_confidence_fields=layout_low_confidence_fields,
+                )
+                candidate_lines = self._merge_invoice_lines(invoice.lines, layout_lines)
+                if self._count_meaningful_invoice_lines(candidate_lines) > self._count_meaningful_invoice_lines(
+                    invoice.lines
+                ):
+                    merged_lines = candidate_lines
+                    note = (
+                        "Invoice line items were backfilled from Google Document AI layout tables because "
+                        "the invoice processor returned sparse row detail."
+                    )
+                    raw_payload["layout_backfill_used"] = True
+                    raw_payload["layout_model_id"] = layout_model_id
+                    raw_payload["layout_analysis_result"] = layout_analysis
+
+        if self._count_meaningful_invoice_lines(merged_lines) <= self._count_meaningful_invoice_lines(
+            invoice.lines
+        ):
+            return result
+
+        invoice.lines = merged_lines
+        invoice.header.discount_total = sum((line.discount_amount for line in merged_lines), start=Decimal("0.00"))
+        invoice.tax_summaries = self._build_tax_summaries(merged_lines, invoice.header.tax_total)
+        invoice.discount_summaries = self._build_discount_summaries(merged_lines)
+        invoice.department_summaries = self._build_department_summaries(merged_lines)
+
+        if note and note not in invoice.audit.notes:
+            invoice.audit.notes.append(note)
+        if raw_payload.get("text_quantity_backfill_used"):
+            quantity_note = (
+                "Invoice quantities were heuristically backfilled from the Google Document AI OCR text because "
+                "the invoice processor did not return quantity values."
+            )
+            if quantity_note not in invoice.audit.notes:
+                invoice.audit.notes.append(quantity_note)
+
+        combined_low_confidence = invoice.low_confidence_fields + [
+            field
+            for field in layout_low_confidence_fields
+            if field.field_path not in {existing.field_path for existing in invoice.low_confidence_fields}
+        ]
+        invoice.low_confidence_fields = combined_low_confidence
+
+        raw_payload["invoice_model_id"] = invoice_model_id
+
+        result.raw_payload = raw_payload
+        result.canonical_payload = invoice.model_dump(mode="python")
+        result.low_confidence_fields = invoice.low_confidence_fields
+        return result
+
+    def _invoice_lines_need_layout_backfill(self, result: ProviderExtractionResult) -> bool:
+        payload = result.canonical_payload
+        lines = payload.get("lines") if isinstance(payload, dict) else None
+        if not isinstance(lines, list) or not lines:
+            return True
+        return self._count_meaningful_invoice_lines(lines) * 2 < len(lines)
+
+    def _count_meaningful_invoice_lines(self, lines: list[InvoiceLine] | list[dict[str, Any]]) -> int:
+        meaningful = 0
+        for line in lines:
+            if isinstance(line, InvoiceLine):
+                product_code = (line.product_code or "").strip()
+                description = line.description.strip()
+            elif isinstance(line, dict):
+                product_code = str(line.get("product_code") or "").strip()
+                description = str(line.get("description") or "").strip()
+            else:
+                continue
+
+            if product_code:
+                meaningful += 1
+                continue
+            if description and not self._is_placeholder_invoice_description(description) and re.search(
+                r"[A-Za-z]",
+                description,
+            ):
+                meaningful += 1
+        return meaningful
+
+    def _is_placeholder_invoice_description(self, value: str) -> bool:
+        return bool(re.fullmatch(r"Line\s+\d+", value.strip(), flags=re.IGNORECASE))
+
+    def _merge_invoice_lines(
+        self,
+        primary_lines: list[InvoiceLine],
+        layout_lines: list[InvoiceLine],
+    ) -> list[InvoiceLine]:
+        if not primary_lines:
+            return layout_lines
+        if len(primary_lines) != len(layout_lines):
+            if self._count_meaningful_invoice_lines(layout_lines) > self._count_meaningful_invoice_lines(
+                primary_lines
+            ):
+                return layout_lines
+            return primary_lines
+
+        zero = Decimal("0.00")
+        merged: list[InvoiceLine] = []
+        for index, (primary, layout) in enumerate(zip(primary_lines, layout_lines, strict=False), start=1):
+            primary_description = primary.description.strip()
+            use_layout_description = (
+                not primary_description or self._is_placeholder_invoice_description(primary_description)
+            )
+            quantity = primary.quantity if primary.quantity != zero else layout.quantity
+            unit_price = primary.unit_price if primary.unit_price != zero else layout.unit_price
+            extended_amount = (
+                primary.extended_amount if primary.extended_amount != zero else layout.extended_amount
+            )
+            discount_amount = (
+                primary.discount_amount if primary.discount_amount != zero else layout.discount_amount
+            )
+            net_amount = primary.net_amount if primary.net_amount != zero else layout.net_amount
+            vat_rate = primary.vat_rate if primary.vat_rate != zero else layout.vat_rate
+            vat_amount = primary.vat_amount if primary.vat_amount != zero else layout.vat_amount
+            gross_amount = primary.gross_amount if primary.gross_amount != zero else layout.gross_amount
+            if unit_price == zero and net_amount != zero and quantity != zero:
+                unit_price = (net_amount / quantity).quantize(Decimal("0.0001"))
+            if extended_amount == zero and unit_price != zero and quantity != zero:
+                extended_amount = unit_price * quantity
+            if net_amount == zero and extended_amount != zero:
+                net_amount = extended_amount
+            if gross_amount == zero and net_amount != zero:
+                gross_amount = net_amount + vat_amount
+            merged.append(
+                InvoiceLine(
+                    line_number=index,
+                    page_number=primary.page_number or layout.page_number,
+                    product_code=(primary.product_code or layout.product_code or None),
+                    description=layout.description if use_layout_description else primary.description,
+                    department_code=primary.department_code or layout.department_code,
+                    department_name=primary.department_name or layout.department_name,
+                    quantity=quantity,
+                    unit_of_measure=primary.unit_of_measure or layout.unit_of_measure,
+                    unit_price=unit_price,
+                    extended_amount=extended_amount,
+                    discount_amount=discount_amount,
+                    net_amount=net_amount,
+                    vat_rate=vat_rate,
+                    vat_amount=vat_amount,
+                    gross_amount=gross_amount,
+                    delivery_reference=primary.delivery_reference or layout.delivery_reference,
+                    source_reference=primary.source_reference or layout.source_reference,
+                    confidence_scores={**layout.confidence_scores, **primary.confidence_scores},
+                )
+            )
+        return merged
+
+    def _extract_invoice_lines_from_tables(
+        self,
+        analysis: dict[str, Any],
+        *,
+        low_confidence_fields: list[Any],
+    ) -> list[InvoiceLine]:
+        zero = Decimal("0.00")
+        lines: list[InvoiceLine] = []
+        for table in self._iter_table_matrices(analysis):
+            rows = table.get("rows") or []
+            header_index, header_map = self._invoice_table_header(rows)
+            if header_index is None or not header_map:
+                continue
+
+            for row_index, row in enumerate(rows[header_index + 1 :], start=header_index + 1):
+                if not any(cell.strip() for cell in row):
+                    continue
+
+                description = self._row_value(row, header_map, "description")
+                product_code = self._row_value(row, header_map, "product_code") or self._find_row_product_code(row)
+                if description and self._looks_like_total_row(description):
+                    continue
+                if not description and not product_code:
+                    continue
+
+                quantity = self._parse_decimal(self._row_value(row, header_map, "quantity")) or zero
+                unit_price = self._parse_decimal(self._row_value(row, header_map, "unit_price"))
+                net_amount = self._parse_decimal(self._row_value(row, header_map, "net_amount"))
+                vat_amount = self._parse_decimal(self._row_value(row, header_map, "vat_amount")) or zero
+                gross_amount = self._parse_decimal(self._row_value(row, header_map, "gross_amount"))
+
+                if gross_amount is None and net_amount is not None:
+                    gross_amount = net_amount + vat_amount
+                if net_amount is None and gross_amount is not None:
+                    net_amount = max(gross_amount - vat_amount, zero)
+                if net_amount is None and unit_price is not None and quantity != zero:
+                    net_amount = unit_price * quantity
+                if unit_price is None and net_amount is not None and quantity != zero:
+                    unit_price = net_amount / quantity
+
+                if net_amount is None and gross_amount is None and unit_price is None:
+                    continue
+
+                description = re.sub(r"\s+", " ", (description or product_code or "").strip())
+                if not description:
+                    continue
+
+                unit_price = unit_price or zero
+                net_amount = net_amount or zero
+                gross_amount = gross_amount or (net_amount + vat_amount)
+                tax_rate = zero
+                if net_amount != zero and vat_amount != zero:
+                    tax_rate = self._normalize_rate((vat_amount / net_amount) * Decimal("100")) or zero
+
+                page_number = table.get("page_number")
+                line = InvoiceLine(
+                    line_number=len(lines) + 1,
+                    page_number=page_number,
+                    product_code=product_code or None,
+                    description=description,
+                    department_code=None,
+                    department_name=None,
+                    quantity=quantity,
+                    unit_of_measure=self._row_value(row, header_map, "unit_of_measure") or None,
+                    unit_price=unit_price,
+                    extended_amount=net_amount,
+                    discount_amount=zero,
+                    net_amount=net_amount,
+                    vat_rate=tax_rate,
+                    vat_amount=vat_amount,
+                    gross_amount=gross_amount,
+                    delivery_reference=None,
+                    source_reference=f"google-layout-table-{table['table_index']}-row-{row_index}",
+                    confidence_scores={},
+                )
+                if quantity == zero:
+                    self._flag_if_low(
+                        low_confidence_fields,
+                        f"lines[{len(lines)}].quantity",
+                        0.42,
+                        str(quantity),
+                        page_number,
+                        comment="Quantity could not be parsed cleanly from the Google layout table row.",
+                    )
+                lines.append(line)
+            if lines:
+                break
+        return lines
+
+    def _extract_invoice_line_identities_from_text(
+        self,
+        analysis: dict[str, Any],
+    ) -> list[InvoiceLine]:
+        content = self._analysis_content(analysis)
+        raw_lines = [re.sub(r"\s+", " ", line).strip() for line in content.splitlines() if line.strip()]
+        if not raw_lines:
+            return []
+
+        codes: list[str] = []
+        descriptions: list[str] = []
+        start_index: int | None = None
+        for index, raw_line in enumerate(raw_lines):
+            if self._looks_like_product_code(raw_line):
+                start_index = index
+                break
+        if start_index is None:
+            return []
+
+        cursor = start_index
+        while cursor < len(raw_lines) and self._looks_like_product_code(raw_lines[cursor]):
+            codes.append(raw_lines[cursor].strip().replace(" ", ""))
+            cursor += 1
+
+        while cursor < len(raw_lines):
+            normalized = self._normalize_label(raw_lines[cursor])
+            if normalized in {
+                "pack size",
+                "quantity",
+                "unit cost",
+                "dept code",
+                "vat rate",
+                "goods per",
+                "drs",
+                "charges",
+                "vat code",
+            }:
+                break
+            if self._looks_like_total_row(raw_lines[cursor]) or self._looks_like_product_code(raw_lines[cursor]):
+                break
+            if re.search(r"[A-Za-z]", raw_lines[cursor]):
+                descriptions.append(raw_lines[cursor].strip())
+            cursor += 1
+
+        if not codes or len(codes) != len(descriptions):
+            return []
+
+        zero = Decimal("0.00")
+        quantities = self._extract_invoice_quantities_from_text(raw_lines[cursor:], expected_count=len(codes))
+        return [
+            InvoiceLine(
+                line_number=index,
+                page_number=1,
+                product_code=code,
+                description=description,
+                department_code=None,
+                department_name=None,
+                quantity=quantities[index - 1] if index - 1 < len(quantities) else zero,
+                unit_of_measure=None,
+                unit_price=zero,
+                extended_amount=zero,
+                discount_amount=zero,
+                net_amount=zero,
+                vat_rate=zero,
+                vat_amount=zero,
+                gross_amount=zero,
+                delivery_reference=None,
+                source_reference=f"google-text-line-{index}",
+                confidence_scores={},
+            )
+            for index, (code, description) in enumerate(zip(codes, descriptions, strict=False), start=1)
+        ]
+
+    def _extract_invoice_quantities_from_text(
+        self,
+        trailing_lines: list[str],
+        *,
+        expected_count: int,
+    ) -> list[Decimal]:
+        if expected_count <= 0:
+            return []
+
+        normalized_lines = [self._normalize_label(line) for line in trailing_lines]
+        if not any(normalized in {"quantity", "qty", "invoice qty", "invoiced qty"} for normalized in normalized_lines):
+            return []
+
+        quantity_candidates: list[Decimal] = []
+        for raw_line in trailing_lines:
+            compact = raw_line.strip().replace(" ", "")
+            if not compact or len(compact) > 6:
+                continue
+            if not re.fullmatch(r"\d+(?:\.\d+)?", compact):
+                continue
+            quantity = self._parse_decimal(compact)
+            if quantity is None or quantity <= Decimal("0.00") or quantity > Decimal("1000"):
+                continue
+            quantity_candidates.append(quantity)
+
+        if len(quantity_candidates) == expected_count:
+            return quantity_candidates
+        if not quantity_candidates:
+            return []
+
+        dominant_quantity, dominant_count = Counter(quantity_candidates).most_common(1)[0]
+        if dominant_count >= expected_count:
+            return [dominant_quantity] * expected_count
+        return []
+
+    def _invoice_table_header(
+        self,
+        rows: list[list[str]],
+    ) -> tuple[int | None, dict[str, int]]:
+        best_index: int | None = None
+        best_map: dict[str, int] = {}
+        best_score = 0
+        for index, row in enumerate(rows[:3]):
+            header_map = self._invoice_table_header_map(row)
+            score = len(header_map)
+            if score > best_score and ("description" in header_map or "product_code" in header_map):
+                best_index = index
+                best_map = header_map
+                best_score = score
+        if best_score < 2:
+            return None, {}
+        return best_index, best_map
+
+    def _invoice_table_header_map(self, header_row: list[str]) -> dict[str, int]:
+        mapping: dict[str, int] = {}
+        for index, header in enumerate(header_row):
+            normalized = self._normalize_label(header)
+            if not normalized:
+                continue
+            if any(token in normalized for token in ("sku", "product code", "item code", "code")):
+                mapping["product_code"] = index
+                continue
+            if any(token in normalized for token in ("qty", "quantity", "invoice qty", "invoiced qty")):
+                mapping["quantity"] = index
+                continue
+            if "unit price" in normalized or normalized == "price":
+                mapping["unit_price"] = index
+                continue
+            if any(token in normalized for token in ("vat amount", "tax amount", "vat", "tax")):
+                mapping["vat_amount"] = index
+                continue
+            if any(
+                token in normalized
+                for token in ("gross", "line total", "total invoice", "gross amount", "amount incl", "inc vat")
+            ) or normalized == "total":
+                mapping["gross_amount"] = index
+                continue
+            if any(
+                token in normalized
+                for token in ("pre amount", "net c", "net amount", "net", "amount ex", "subtotal", "line amount")
+            ) or normalized == "amount":
+                mapping["net_amount"] = index
+                continue
+            if any(token in normalized for token in ("uom", "unit")) and "price" not in normalized:
+                mapping["unit_of_measure"] = index
+                continue
+            if any(
+                token in normalized
+                for token in (
+                    "description",
+                    "item description",
+                    "product description",
+                    "product name",
+                    "product",
+                    "item",
+                    "name",
+                )
+            ):
+                mapping["description"] = index
+        return mapping
+
+    def _find_row_product_code(self, row: list[str]) -> str:
+        for cell in row:
+            if self._looks_like_product_code(cell):
+                return cell.strip()
+        return ""
+
+    def _looks_like_product_code(self, value: str) -> bool:
+        normalized = value.strip().replace(" ", "")
+        return bool(re.fullmatch(r"[A-Z0-9]{3,20}", normalized) and re.search(r"\d", normalized))
 
     def _entity_to_field(self, entity: dict[str, Any]) -> dict[str, Any] | None:
         page_number = self._entity_page_number(entity)

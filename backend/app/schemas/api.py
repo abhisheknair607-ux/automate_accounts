@@ -35,7 +35,7 @@ class ManualReconciliationRequest(ApiBaseModel):
 
 
 class ExportRequest(ApiBaseModel):
-    export_format: Literal["csv", "json", "reco_csv", "reco_excel", "ocr_excel", "pnl_csv"] = "csv"
+    export_format: Literal["csv", "json", "reco_csv", "reco_excel", "ocr_excel", "ocr_html", "pnl_csv"] = "csv"
 
 
 class DocumentResponse(ApiBaseModel):

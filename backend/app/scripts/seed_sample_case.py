@@ -57,7 +57,7 @@ def seed() -> str:
         )
         reconciliation_service.run(db, case_id=case.id)
         export_service.create_export(db, case_id=case.id, export_format="reco_excel")
-        export_service.create_export(db, case_id=case.id, export_format="ocr_excel")
+        export_service.create_export(db, case_id=case.id, export_format="ocr_html")
         export_service.create_export(db, case_id=case.id, export_format="pnl_csv")
         return case.id
 

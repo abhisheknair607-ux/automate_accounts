@@ -46,8 +46,14 @@ function inferDownloadFilename(response: Response, exportId: string): string {
   if (contentType.includes("spreadsheetml")) {
     return `${exportId}.xlsx`;
   }
+  if (contentType.includes("text/html")) {
+    return `${exportId}.html`;
+  }
   if (contentType.includes("json")) {
     return `${exportId}.json`;
+  }
+  if (contentType.includes("text/csv")) {
+    return `${exportId}.csv`;
   }
   return `${exportId}.csv`;
 }
@@ -165,7 +171,7 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(requestBody)
     }),
-  createExport: (caseId: string, exportFormat: "csv" | "json" | "reco_csv" | "reco_excel" | "ocr_excel" | "pnl_csv" = "csv") =>
+  createExport: (caseId: string, exportFormat: "csv" | "json" | "reco_csv" | "reco_excel" | "ocr_excel" | "ocr_html" | "pnl_csv" = "csv") =>
     request<Record<string, unknown>>(`/exports/cases/${caseId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

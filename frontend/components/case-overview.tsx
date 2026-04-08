@@ -104,9 +104,9 @@ export function CaseOverview({ caseId }: { caseId: string }) {
             <button
               className="secondary-button"
               disabled={isPending}
-              onClick={() => trigger("Create raw OCR audit export", () => api.createExport(caseId, "ocr_excel"))}
+              onClick={() => trigger("Create OCR review export", () => api.createExport(caseId, "ocr_html"))}
             >
-              {busyAction === "Create raw OCR audit export" ? "Exporting..." : "4. Create Raw OCR Audit Excel"}
+              {busyAction === "Create OCR review export" ? "Exporting..." : "4. Create OCR Review HTML"}
             </button>
             <button
               className="secondary-button"

@@ -14,6 +14,6 @@
 # (no CORS needed). Must be declared here — the plugin owns _redirects.
 [[redirects]]
   from = "/api/*"
-  to = "https://automate-backend-qfj5.onrender.com/api/:splat"
+  to = "https://automate-backend-410762044821.europe-west1.run.app/api/:splat"
   status = 200
   force = true

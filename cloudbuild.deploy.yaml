@@ -1,0 +1,11 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - backend/Dockerfile
+      - -t
+      - europe-west1-docker.pkg.dev/automate-accounts-492602/automate-backend/automate-backend:latest
+      - .
+images:
+  - europe-west1-docker.pkg.dev/automate-accounts-492602/automate-backend/automate-backend:latest
